@@ -1,0 +1,70 @@
+@import "tailwindcss";
+
+@theme {
+  --font-display: "Barlow Condensed", sans-serif;
+  --font-body: "Source Sans 3", sans-serif;
+  --color-ink: #0a1f28;
+  --color-ink-soft: #1a3a47;
+  --color-sea: #0b3a4a;
+  --color-sea-mid: #146477;
+  --color-mint: #e8f4f2;
+  --color-mint-deep: #b8d9d2;
+  --color-amber: #f0a818;
+  --color-amber-soft: #fde9b8;
+  --color-coral: #d94f3d;
+  --color-coral-soft: #f8d4ce;
+  --color-ok: #1f8a5b;
+  --color-ok-soft: #d4f0e4;
+  --color-cd: #6b2d5b;
+  --color-cd-soft: #f3e0ee;
+  --color-surface: #f4f7f6;
+  --color-panel: #ffffff;
+  --color-line: #c5d5d2;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html, body, #root {
+  min-height: 100%;
+}
+
+body {
+  margin: 0;
+  font-family: var(--font-body);
+  color: var(--color-ink);
+  background:
+    radial-gradient(ellipse 80% 50% at 10% -10%, #c5e4de 0%, transparent 55%),
+    radial-gradient(ellipse 60% 40% at 100% 0%, #fde9b8 0%, transparent 45%),
+    linear-gradient(180deg, #eef5f3 0%, var(--color-surface) 40%, #e6efed 100%);
+  background-attachment: fixed;
+}
+
+button, input, select, textarea {
+  font: inherit;
+}
+
+.font-display {
+  font-family: var(--font-display);
+  letter-spacing: 0.02em;
+}
+
+@media print {
+  body {
+    background: white !important;
+  }
+  aside,
+  header,
+  .print\:hidden,
+  nav {
+    display: none !important;
+  }
+  main {
+    padding: 0 !important;
+    max-width: none !important;
+  }
+  .print-area {
+    break-inside: avoid;
+  }
+}
