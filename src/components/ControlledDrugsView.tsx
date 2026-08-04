@@ -1,8 +1,9 @@
 import { format } from 'date-fns'
-import { Lock, ShieldAlert } from 'lucide-react'
+import { FileDown, Lock, ShieldAlert } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
-import { getAdminOptions } from '../data/adminOptions'
+import { filterOptionsForGrade } from '../data/cpg'
 import { useApp } from '../context/AppContext'
+import { downloadCdRegisterPdf } from '../lib/cdRegisterPdf'
 import { GradeBadge, StatusBadge } from './Badges'
 
 export function ControlledDrugsView({ onOpenBag }: { onOpenBag: (id: string) => void }) {
@@ -20,7 +21,6 @@ export function ControlledDrugsView({ onOpenBag }: { onOpenBag: (id: string) => 
 
   const [bagId, setBagId] = useState(cdBags[0]?.id ?? '')
   const [itemId, setItemId] = useState('')
-  const [qty, setQty] = useState(1)
   const [patientRef, setPatientRef] = useState('')
   const [witnessId, setWitnessId] = useState('')
   const [dose, setDose] = useState('')
@@ -31,10 +31,16 @@ export function ControlledDrugsView({ onOpenBag }: { onOpenBag: (id: string) => 
   const [restockQty, setRestockQty] = useState(1)
   const [lot, setLot] = useState('')
   const [expiry, setExpiry] = useState('')
+  const [drawn, setDrawn] = useState(1)
+  const [given, setGiven] = useState(1)
+  const [wastedPart, setWastedPart] = useState(0)
 
   const bag = cdBags.find((b) => b.id === bagId)
   const item = bag?.items.find((i) => i.id === itemId) ?? bag?.items[0]
-  const options = useMemo(() => getAdminOptions(item?.medicationId ?? ''), [item?.medicationId])
+  const options = useMemo(
+    () => filterOptionsForGrade(item?.medicationId ?? '', currentUser?.grade ?? 'AP'),
+    [item?.medicationId, currentUser?.grade],
+  )
 
   useEffect(() => {
     setDose(options.doses[0] ?? '')
@@ -66,16 +72,36 @@ export function ControlledDrugsView({ onOpenBag }: { onOpenBag: (id: string) => 
       setMsg('Select dose, route and indication.')
       return
     }
+    if (drawn !== given + wastedPart) {
+      setMsg('Part-dose: drawn must equal given + wasted.')
+      return
+    }
+    if (drawn > item.quantity) {
+      setMsg(`Only ${item.quantity} on hand.`)
+      return
+    }
     const notes = [
+      `CPG ${options.cpgVersion}`,
       `Dose: ${dose}`,
       `Route: ${route}`,
       `Indication: ${indication}`,
+      options.outOfScopeMed ? 'OUT OF SCOPE' : null,
       extraNotes && `Notes: ${extraNotes}`,
     ]
       .filter(Boolean)
       .join(' · ')
-    recordAdministration(bag.id, item.id, qty, currentUser, witness, patientRef, notes)
-    setMsg(`CD signed out: ${qty} × ${item.name}`)
+    recordAdministration({
+      bagId: bag.id,
+      itemId: item.id,
+      qty: drawn,
+      practitioner: currentUser,
+      witness,
+      patientRef,
+      notes,
+      outOfScope: options.outOfScopeMed,
+      partDose: { drawn, given, wasted: wastedPart, unit: item.unit },
+    })
+    setMsg(`CD accounted: drawn ${drawn} · given ${given} · wasted ${wastedPart}`)
     setPatientRef('')
     setExtraNotes('')
   }
@@ -107,9 +133,18 @@ export function ControlledDrugsView({ onOpenBag }: { onOpenBag: (id: string) => 
           <strong>Advanced Paramedic</strong> (Morphine & Fentanyl Schedule 2, Ketamine Schedule 2,
           Midazolam Schedule 3, Diazepam & Lorazepam Schedule 4). Dual signature required for all CD movements.
         </p>
-        <div className="mt-3 flex items-start gap-2 rounded-lg bg-panel/80 px-3 py-2 text-xs text-ink-soft">
-          <ShieldAlert size={14} className="mt-0.5 shrink-0 text-cd" />
-          Misuse of Drugs Regulations 2017 / HPRA licence conditions apply. CDs must remain in certified safe custody when not signed out to a privileged practitioner.
+        <div className="mt-3 flex flex-wrap items-center gap-3">
+          <div className="flex items-start gap-2 rounded-lg bg-panel/80 px-3 py-2 text-xs text-ink-soft">
+            <ShieldAlert size={14} className="mt-0.5 shrink-0 text-cd" />
+            Misuse of Drugs Regulations 2017 / HPRA licence conditions apply. CDs must remain in certified safe custody when not signed out to a privileged practitioner.
+          </div>
+          <button
+            type="button"
+            onClick={() => downloadCdRegisterPdf(state)}
+            className="inline-flex items-center gap-1.5 rounded-lg bg-cd px-3 py-2 text-xs font-bold text-white"
+          >
+            <FileDown size={14} /> CD register PDF
+          </button>
         </div>
       </div>
 
@@ -176,22 +211,50 @@ export function ControlledDrugsView({ onOpenBag }: { onOpenBag: (id: string) => 
                 </option>
               ))}
             </select>
-            <div className="grid grid-cols-2 gap-2">
-              <input
-                type="number"
-                min={1}
-                value={qty}
-                onChange={(e) => setQty(Math.max(1, Number(e.target.value)))}
-                className="rounded-lg border border-line bg-surface px-3 py-2"
-                placeholder="Qty"
-              />
-              <input
-                value={patientRef}
-                onChange={(e) => setPatientRef(e.target.value)}
-                className="rounded-lg border border-line bg-surface px-3 py-2"
-                placeholder="PCR ref"
-              />
+            <input
+              value={patientRef}
+              onChange={(e) => setPatientRef(e.target.value)}
+              className="w-full rounded-lg border border-line bg-surface px-3 py-2"
+              placeholder="PCR ref"
+            />
+            <div className="grid grid-cols-3 gap-2">
+              <label className="block">
+                <span className="mb-1 block text-[10px] font-bold uppercase text-ink-soft">Drawn</span>
+                <input
+                  type="number"
+                  min={0}
+                  step={0.1}
+                  value={drawn}
+                  onChange={(e) => setDrawn(Number(e.target.value))}
+                  className="w-full rounded-lg border border-line bg-surface px-2 py-2"
+                />
+              </label>
+              <label className="block">
+                <span className="mb-1 block text-[10px] font-bold uppercase text-ink-soft">Given</span>
+                <input
+                  type="number"
+                  min={0}
+                  step={0.1}
+                  value={given}
+                  onChange={(e) => setGiven(Number(e.target.value))}
+                  className="w-full rounded-lg border border-line bg-surface px-2 py-2"
+                />
+              </label>
+              <label className="block">
+                <span className="mb-1 block text-[10px] font-bold uppercase text-ink-soft">Wasted</span>
+                <input
+                  type="number"
+                  min={0}
+                  step={0.1}
+                  value={wastedPart}
+                  onChange={(e) => setWastedPart(Number(e.target.value))}
+                  className="w-full rounded-lg border border-line bg-surface px-2 py-2"
+                />
+              </label>
             </div>
+            <p className="text-[11px] text-ink-soft">
+              Part-dose: drawn must equal given + wasted (Morphine / Fentanyl witness balance).
+            </p>
             <label className="block">
               <span className="mb-1 block text-xs font-semibold uppercase tracking-wide text-ink-soft">Dose</span>
               <select

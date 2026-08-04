@@ -18,6 +18,7 @@ export function Dashboard({
   const expired = allItems.filter(isExpired).length
   const soon = allItems.filter((i) => !isExpired(i) && expiringSoon(i)).length
   const due = bags.filter((b) => b.status === 'check_due' || b.status === 'discrepancy')
+  const onShift = bags.filter((b) => b.status === 'on_shift')
 
   const byGrade = {
     EMT: bags.filter((b) => b.grade === 'EMT' && b.type === 'standard').length,
@@ -29,7 +30,7 @@ export function Dashboard({
   return (
     <div className="space-y-6">
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-        <Stat icon={Package} label="Total bags" value={String(bags.length)} sub="10 drug bags in fleet" />
+        <Stat icon={Package} label="Total bags" value={String(bags.length)} sub={`${onShift.length} currently on shift`} />
         <Stat icon={Lock} label="Controlled drug pouches" value={String(cdBags.length)} sub="Paramedic + AP CDs" accent="cd" />
         <Stat icon={Timer} label="Expiring ≤90 days" value={String(soon)} sub={`${expired} already expired`} accent="amber" />
         <Stat icon={AlertTriangle} label="Attention needed" value={String(due.length)} sub="Checks & discrepancies" accent="coral" />

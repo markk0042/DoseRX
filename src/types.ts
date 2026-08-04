@@ -1,8 +1,15 @@
 export type ClinicalGrade = 'EMT' | 'Paramedic' | 'AP'
 export type UserRole = 'management' | 'staff'
-export type BagType = 'standard' | 'controlled'
-export type BagStatus = 'sealed' | 'open' | 'check_due' | 'discrepancy' | 'expired_items' | 'on_shift'
+export type BagType = 'standard' | 'controlled' | 'event'
+export type BagStatus =
+  | 'sealed'
+  | 'open'
+  | 'check_due'
+  | 'discrepancy'
+  | 'expired_items'
+  | 'on_shift'
 export type TagStatus = 'green' | 'red' | 'untagged'
+export type DiscrepancyStatus = 'open' | 'investigating' | 'resolved'
 export type ActivityType =
   | 'inventory_check'
   | 'management_stock'
@@ -14,8 +21,29 @@ export type ActivityType =
   | 'cd_sign_out'
   | 'cd_sign_in'
   | 'discrepancy'
+  | 'discrepancy_resolved'
   | 'shift_sign_out'
   | 'shift_return'
+  | 'sync'
+  | 'event_pack_created'
+  | 'part_dose'
+  | 'bag_renamed'
+
+export const CPG_VERSION = '2026 Edition'
+
+export interface GeoPoint {
+  lat: number
+  lng: number
+  accuracy?: number
+  capturedAt: string
+}
+
+export interface PhotoEvidence {
+  id: string
+  dataUrl: string
+  caption?: string
+  capturedAt: string
+}
 
 export interface MedicationDef {
   id: string
@@ -34,9 +62,7 @@ export interface StockItem {
   medicationId: string
   name: string
   presentation: string
-  /** Live on-hand count — set by management, deducted by staff admin/waste */
   quantity: number
-  /** Full-bag target set by management (does not change on administration) */
   parLevel: number
   lotNumber: string
   expiryDate: string
@@ -59,9 +85,13 @@ export interface DrugBag {
   lastCheckedBy?: string
   lastStockedAt?: string
   lastStockedBy?: string
-  /** Active shift assignment id if bag is signed out */
   activeShiftId?: string | null
   items: StockItem[]
+  /** Event / multi-agency temporary pack */
+  eventName?: string
+  eventStartsAt?: string
+  eventEndsAt?: string
+  lastKnownLocation?: GeoPoint
 }
 
 export interface StaffMember {
@@ -92,6 +122,17 @@ export interface ShiftAssignment {
   active: boolean
   notesOut?: string
   notesReturn?: string
+  photoOut?: PhotoEvidence
+  photoReturn?: PhotoEvidence
+  locationOut?: GeoPoint
+  locationReturn?: GeoPoint
+}
+
+export interface PartDoseRecord {
+  drawn: number
+  given: number
+  wasted: number
+  unit: string
 }
 
 export interface ActivityLog {
@@ -109,6 +150,41 @@ export interface ActivityLog {
   notes?: string
   patientRef?: string
   discrepancy?: boolean
+  outOfScope?: boolean
+  cpgVersion?: string
+  partDose?: PartDoseRecord
+  location?: GeoPoint
+  photoIds?: string[]
+  synced?: boolean
+}
+
+export interface DiscrepancyCase {
+  id: string
+  bagId: string
+  bagCode: string
+  status: DiscrepancyStatus
+  reportedAt: string
+  reportedById: string
+  reportedByName: string
+  witnessId?: string
+  witnessName?: string
+  summary: string
+  details?: string
+  itemNotes?: string
+  assignedToId?: string
+  assignedToName?: string
+  resolution?: string
+  resolvedAt?: string
+  resolvedById?: string
+  resolvedByName?: string
+}
+
+export interface PendingSyncItem {
+  id: string
+  createdAt: string
+  label: string
+  offline: boolean
+  payloadType: string
 }
 
 export interface AppState {
@@ -116,7 +192,11 @@ export interface AppState {
   staff: StaffMember[]
   activities: ActivityLog[]
   shifts: ShiftAssignment[]
+  discrepancies: DiscrepancyCase[]
+  pendingSync: PendingSyncItem[]
   currentUserId: string | null
+  sandboxMode: boolean
+  lastSyncedAt?: string
 }
 
 export type QrPayload =

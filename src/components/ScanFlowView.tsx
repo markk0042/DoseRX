@@ -1,10 +1,13 @@
 import { format } from 'date-fns'
-import { ArrowLeft, Package, Pill, QrCode } from 'lucide-react'
+import { ArrowLeft, ClipboardList, Package, Pill, QrCode } from 'lucide-react'
 import { useCallback, useMemo, useState } from 'react'
-import { getAdminOptions } from '../data/adminOptions'
+import { filterOptionsForGrade } from '../data/cpg'
 import { useApp } from '../context/AppContext'
+import { captureLocation } from '../lib/geo'
 import { parseQrPayload } from '../lib/qr'
-import type { StaffMember, TagStatus } from '../types'
+import type { PhotoEvidence, StaffMember, TagStatus } from '../types'
+import { PhotoCapture } from './PhotoCapture'
+import { BusyOverlay } from './BusyOverlay'
 import { QrScanner } from './QrScanner'
 import { WitnessVerify } from './WitnessVerify'
 
@@ -13,6 +16,7 @@ type Phase =
   | 'med-detail'
   | 'med-admin'
   | 'bag-menu'
+  | 'bag-contents'
   | 'bag-signout'
   | 'bag-return'
 
@@ -49,11 +53,17 @@ export function ScanFlowView() {
   const [indication, setIndication] = useState('')
   const [extraNotes, setExtraNotes] = useState('')
   const [adminWitness, setAdminWitness] = useState<StaffMember | null>(null)
+  const [photoOut, setPhotoOut] = useState<PhotoEvidence | null>(null)
+  const [photoReturn, setPhotoReturn] = useState<PhotoEvidence | null>(null)
+  const [submitting, setSubmitting] = useState(false)
 
   const bag = bagId ? getBag(bagId) : undefined
   const item = bag && itemId ? bag.items.find((i) => i.id === itemId) : undefined
   const activeShift = bagId ? getActiveShift(bagId) : undefined
-  const options = useMemo(() => getAdminOptions(item?.medicationId ?? ''), [item?.medicationId])
+  const options = useMemo(
+    () => filterOptionsForGrade(item?.medicationId ?? '', currentUser?.grade ?? 'AP'),
+    [item?.medicationId, currentUser?.grade],
+  )
 
   const resetToScan = () => {
     setPhase('scan')
@@ -71,6 +81,8 @@ export function ScanFlowView() {
     setPatientRef('')
     setExtraNotes('')
     setAdminWitness(null)
+    setPhotoOut(null)
+    setPhotoReturn(null)
   }
 
   const handleScan = useCallback(
@@ -100,16 +112,16 @@ export function ScanFlowView() {
         return
       }
       setItemId(payload.itemId)
-      const opts = getAdminOptions(foundItem.medicationId)
+      const opts = filterOptionsForGrade(foundItem.medicationId, currentUser?.grade ?? 'AP')
       setDose(opts.doses[0] ?? '')
       setRoute(opts.routes[0] ?? '')
       setIndication(opts.indications[0] ?? '')
       setPhase('med-detail')
     },
-    [getBag],
+    [getBag, currentUser?.grade],
   )
 
-  const completeSignOut = (witness: StaffMember) => {
+  const completeSignOut = async (witness: StaffMember) => {
     if (!currentUser || !bagId || !tagOut) {
       setMsg('Select tag status.')
       return
@@ -118,6 +130,11 @@ export function ScanFlowView() {
       setMsg('Untagged bag — confirm whether medications were checked.')
       return
     }
+    if (!photoOut) {
+      setMsg('Photo evidence of tag/seal is required before sign-out.')
+      return
+    }
+    const location = await captureLocation()
     const id = signOutBagForShift({
       bagId,
       holder: currentUser,
@@ -125,20 +142,27 @@ export function ScanFlowView() {
       tagStatus: tagOut,
       medsCheckedOnUntagged: tagOut === 'untagged' ? medsChecked === 'yes' : undefined,
       notes: notesOut || undefined,
+      photo: photoOut,
+      location,
     })
     if (!id) {
-      setMsg('Could not sign out — bag may already be on shift, or check answers.')
+      setMsg('Could not sign out — bag may already be on shift, event privilege expired, or check answers.')
       return
     }
     setMsg(`${bag?.code} signed out to ${currentUser.name} (witness ${witness.name}).`)
     setTimeout(resetToScan, 1600)
   }
 
-  const completeReturn = (witness: StaffMember) => {
+  const completeReturn = async (witness: StaffMember) => {
     if (!currentUser || !bagId || !tagIntact || !tagReturn) {
       setMsg('Answer tag questions before returning.')
       return
     }
+    if (!photoReturn) {
+      setMsg('Photo evidence required on return.')
+      return
+    }
+    const location = await captureLocation()
     const ok = returnBagFromShift({
       bagId,
       returner: currentUser,
@@ -146,6 +170,8 @@ export function ScanFlowView() {
       tagStillIntact: tagIntact === 'yes',
       tagStatus: tagReturn,
       notes: notesReturn || undefined,
+      photo: photoReturn,
+      location,
     })
     if (!ok) {
       setMsg('Return failed — bag may not be on shift.')
@@ -155,7 +181,8 @@ export function ScanFlowView() {
     setTimeout(resetToScan, 1600)
   }
 
-  const completeAdmin = () => {
+  const completeAdmin = async () => {
+    if (submitting) return
     if (!currentUser || !bag || !item) {
       setMsg('Sign in required.')
       return
@@ -172,16 +199,43 @@ export function ScanFlowView() {
       setMsg(`Only ${item.quantity} on hand.`)
       return
     }
-    const notes = [`Dose: ${dose}`, `Route: ${route}`, `Indication: ${indication}`, extraNotes && `Notes: ${extraNotes}`]
+    const cpg = filterOptionsForGrade(item.medicationId, currentUser.grade)
+    const notes = [
+      `CPG ${cpg.cpgVersion}`,
+      `Dose: ${dose}`,
+      `Route: ${route}`,
+      `Indication: ${indication}`,
+      cpg.outOfScopeMed ? 'OUT OF SCOPE' : null,
+      extraNotes && `Notes: ${extraNotes}`,
+    ]
       .filter(Boolean)
       .join(' · ')
-    recordAdministration(bag.id, item.id, qty, currentUser, adminWitness, patientRef, notes)
-    setMsg(`Administered ${qty} × ${item.name}. Stock ${item.quantity} → ${item.quantity - qty}.`)
-    setTimeout(resetToScan, 1600)
+    setSubmitting(true)
+    try {
+      const location = await captureLocation()
+      recordAdministration({
+        bagId: bag.id,
+        itemId: item.id,
+        qty,
+        practitioner: currentUser,
+        witness: adminWitness,
+        patientRef,
+        notes,
+        outOfScope: cpg.outOfScopeMed,
+        location,
+      })
+      setMsg(`Administered ${qty} × ${item.name}. Stock ${item.quantity} → ${item.quantity - qty}.`)
+      setTimeout(resetToScan, 1600)
+    } finally {
+      setSubmitting(false)
+    }
   }
 
   return (
     <div className="mx-auto max-w-2xl space-y-4">
+      {submitting && (
+        <BusyOverlay label="Recording…" detail="Saving administration and GPS — please wait." />
+      )}
       <div className="rounded-xl border border-line bg-panel p-4">
         <div className="mb-1 flex items-center gap-2">
           <QrCode className="text-sea" size={22} />
@@ -231,6 +285,13 @@ export function ScanFlowView() {
             </div>
           </div>
           <div className="flex flex-wrap gap-2">
+            <button
+              type="button"
+              onClick={() => setPhase('bag-contents')}
+              className="inline-flex items-center gap-2 rounded-lg border border-line bg-surface px-4 py-2.5 text-sm font-bold text-ink hover:border-sea-mid"
+            >
+              <ClipboardList size={16} /> Check contents
+            </button>
             {!activeShift ? (
               <button
                 type="button"
@@ -252,9 +313,114 @@ export function ScanFlowView() {
         </div>
       )}
 
+      {phase === 'bag-contents' && bag && (
+        <div className="space-y-4 rounded-xl border border-line bg-panel p-5">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <h3 className="font-display text-xl font-bold">Bag contents · {bag.code}</h3>
+              <p className="text-sm text-ink-soft">
+                {bag.name} · {bag.items.length} medications · review before signing out
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() => setPhase('bag-menu')}
+              className="inline-flex items-center gap-1 text-sm font-semibold text-sea-mid hover:underline"
+            >
+              <ArrowLeft size={14} /> Back
+            </button>
+          </div>
+
+          <div className="overflow-hidden rounded-xl border border-line">
+            <table className="w-full min-w-[560px] text-left text-sm">
+              <thead className="bg-sea/5 text-xs uppercase tracking-wide text-ink-soft">
+                <tr>
+                  <th className="px-3 py-2 font-semibold">Medication</th>
+                  <th className="px-3 py-2 font-semibold">On hand</th>
+                  <th className="px-3 py-2 font-semibold">Batch</th>
+                  <th className="px-3 py-2 font-semibold">Expiry</th>
+                  <th className="px-3 py-2 font-semibold">Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                {bag.items.map((item) => {
+                  const expired = isExpired(item)
+                  const soon = !expired && expiringSoon(item)
+                  return (
+                    <tr key={item.id} className="border-t border-line/70">
+                      <td className="px-3 py-2.5">
+                        <p className="font-semibold">
+                          {item.name}
+                          {item.controlled && (
+                            <span className="ml-1.5 rounded bg-cd-soft px-1.5 py-0.5 text-[10px] font-bold text-cd">
+                              Sch {item.schedule}
+                            </span>
+                          )}
+                        </p>
+                        <p className="text-xs text-ink-soft">{item.presentation}</p>
+                      </td>
+                      <td className="px-3 py-2.5 font-semibold">
+                        {item.quantity}{' '}
+                        <span className="font-normal text-ink-soft">{item.unit}</span>
+                        <span className="block text-xs font-normal text-ink-soft/70">
+                          par {item.parLevel}
+                        </span>
+                      </td>
+                      <td className="px-3 py-2.5 font-mono text-xs">{item.lotNumber}</td>
+                      <td className="px-3 py-2.5">{format(new Date(item.expiryDate), 'MMM yyyy')}</td>
+                      <td className="px-3 py-2.5">
+                        {expired ? (
+                          <span className="text-xs font-semibold text-coral">Expired</span>
+                        ) : soon ? (
+                          <span className="text-xs font-semibold text-ink">Expiring soon</span>
+                        ) : item.quantity === 0 ? (
+                          <span className="text-xs font-semibold text-coral">Empty</span>
+                        ) : item.quantity < item.parLevel ? (
+                          <span className="text-xs font-semibold text-ink">Below par</span>
+                        ) : (
+                          <span className="text-xs font-semibold text-ok">OK</span>
+                        )}
+                      </td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          </div>
+
+          <div className="flex flex-wrap gap-2">
+            <button
+              type="button"
+              onClick={() => setPhase('bag-menu')}
+              className="rounded-lg border border-line bg-surface px-4 py-2.5 text-sm font-semibold"
+            >
+              Back to bag options
+            </button>
+            {!activeShift && (
+              <button
+                type="button"
+                onClick={() => setPhase('bag-signout')}
+                className="rounded-lg bg-sea px-4 py-2.5 text-sm font-bold text-mint"
+              >
+                Continue to sign out
+              </button>
+            )}
+          </div>
+        </div>
+      )}
+
       {phase === 'bag-signout' && bag && (
         <div className="space-y-4 rounded-xl border border-line bg-panel p-5">
-          <h3 className="font-display text-xl font-bold">Shift sign-out · {bag.code}</h3>
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <h3 className="font-display text-xl font-bold">Shift sign-out · {bag.code}</h3>
+            <button
+              type="button"
+              onClick={() => setPhase('bag-contents')}
+              className="inline-flex items-center gap-1.5 rounded-lg border border-line bg-surface px-3 py-1.5 text-xs font-bold"
+            >
+              <ClipboardList size={14} /> Check contents
+            </button>
+          </div>
           <fieldset>
             <legend className="mb-2 text-sm font-semibold">Is the bag green tagged, red tagged, or untagged?</legend>
             <div className="flex flex-wrap gap-2">
@@ -310,11 +476,18 @@ export function ScanFlowView() {
             </fieldset>
           )}
 
+          <PhotoCapture
+            label="Seal / tag photo (required)"
+            value={photoOut}
+            onChange={setPhotoOut}
+          />
+          <p className="text-xs text-ink-soft">Snap green/red/untagged seal and seal number if present.</p>
+
           <textarea
             value={notesOut}
             onChange={(e) => setNotesOut(e.target.value)}
             rows={2}
-            placeholder="Optional notes"
+            placeholder="Optional notes / seal number"
             className="w-full rounded-lg border border-line bg-surface px-3 py-2 text-sm"
           />
 
@@ -323,6 +496,8 @@ export function ScanFlowView() {
               actor={currentUser}
               onVerified={completeSignOut}
               submitLabel="Assign bag to my shift"
+              busyLabel="Signing bag out…"
+              busyDetail="Photo saved — capturing GPS and locking assignment."
             />
           )}
           {msg && <p className="text-sm font-medium text-ink-soft">{msg}</p>}
@@ -339,18 +514,21 @@ export function ScanFlowView() {
           </p>
 
           <fieldset>
-            <legend className="mb-2 text-sm font-semibold">Is the bag still tagged?</legend>
+            <legend className="mb-2 text-sm font-semibold">Is the bag still tagged / sealed?</legend>
             <div className="flex gap-2">
               {(['yes', 'no'] as const).map((v) => (
                 <button
                   key={v}
                   type="button"
-                  onClick={() => setTagIntact(v)}
+                  onClick={() => {
+                    setTagIntact(v)
+                    if (v === 'no') setTagReturn('untagged')
+                  }}
                   className={`rounded-lg px-4 py-2 text-sm font-semibold capitalize ${
                     tagIntact === v ? 'bg-sea text-mint' : 'border border-line'
                   }`}
                 >
-                  {v}
+                  {v === 'yes' ? 'Yes — sealed' : 'No — unsealed'}
                 </button>
               ))}
             </div>
@@ -361,9 +539,9 @@ export function ScanFlowView() {
             <div className="flex flex-wrap gap-2">
               {(
                 [
-                  ['green', 'Green'],
-                  ['red', 'Red'],
-                  ['untagged', 'Untagged'],
+                  ['green', 'Green (sealed)'],
+                  ['red', 'Red (opened / used)'],
+                  ['untagged', 'Untagged / unsealed'],
                 ] as const
               ).map(([value, label]) => (
                 <button
@@ -371,20 +549,36 @@ export function ScanFlowView() {
                   type="button"
                   onClick={() => setTagReturn(value)}
                   className={`rounded-lg px-3 py-2 text-sm font-semibold ${
-                    tagReturn === value ? 'bg-sea text-mint' : 'border border-line bg-surface'
+                    tagReturn === value
+                      ? value === 'green'
+                        ? 'bg-ok text-white'
+                        : value === 'red'
+                          ? 'bg-coral text-white'
+                          : 'bg-ink text-mint'
+                      : 'border border-line bg-surface'
                   }`}
                 >
                   {label}
                 </button>
               ))}
             </div>
+            <p className="mt-2 text-xs text-ink-soft">
+              Green + still tagged → sealed. Red → open. Untagged / not sealed → check due for admin.
+            </p>
           </fieldset>
+
+          <PhotoCapture
+            label="Return seal / tag photo (required)"
+            value={photoReturn}
+            onChange={setPhotoReturn}
+          />
+          <p className="text-xs text-ink-soft">Capture tag colour and seal number on return.</p>
 
           <textarea
             value={notesReturn}
             onChange={(e) => setNotesReturn(e.target.value)}
             rows={2}
-            placeholder="Optional return notes"
+            placeholder="Optional return notes / seal number"
             className="w-full rounded-lg border border-line bg-surface px-3 py-2 text-sm"
           />
 
@@ -393,6 +587,8 @@ export function ScanFlowView() {
               actor={currentUser}
               onVerified={completeReturn}
               submitLabel="Complete bag return"
+              busyLabel="Returning bag…"
+              busyDetail="Photo saved — capturing GPS and closing shift."
             />
           )}
           {msg && <p className="text-sm font-medium text-ink-soft">{msg}</p>}
@@ -550,11 +746,11 @@ export function ScanFlowView() {
 
           <button
             type="button"
-            onClick={completeAdmin}
-            disabled={!adminWitness}
+            onClick={() => void completeAdmin()}
+            disabled={!adminWitness || submitting}
             className="rounded-lg bg-sea px-5 py-2.5 text-sm font-bold text-mint disabled:opacity-40"
           >
-            Record administration
+            {submitting ? 'Recording…' : 'Record administration'}
           </button>
           {msg && <p className="text-sm font-medium text-ink-soft">{msg}</p>}
         </div>
@@ -578,43 +774,64 @@ function TagPill({ status }: { status: TagStatus }) {
 
 function DemoQuickPick({ onPick }: { onPick: (text: string) => void }) {
   const { state } = useApp()
-  const bag = state.bags[0]
-  const med = bag?.items[0]
-  if (!bag) return null
+  const emtBags = state.bags.filter((b) => b.grade === 'EMT' && b.type === 'standard')
+  const onShift = state.bags.filter((b) => b.activeShiftId)
+  const sampleMedBag = emtBags[0] ?? state.bags.find((b) => b.items.length > 0)
+  const med = sampleMedBag?.items[0]
+
+  if (emtBags.length === 0 && state.bags.length === 0) return null
+
   return (
     <div className="mt-4 border-t border-line pt-3">
-      <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-ink-soft">Demo quick pick (no camera)</p>
-      <div className="flex flex-wrap gap-2">
-        <button
-          type="button"
-          onClick={() => onPick(`DOSERX|BAG|${bag.id}`)}
-          className="rounded-lg border border-line bg-surface px-3 py-1.5 text-xs font-semibold"
-        >
-          Scan {bag.code} (bag)
-        </button>
-        {med && (
+      <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-ink-soft">
+        Demo quick pick (no camera)
+      </p>
+
+      <p className="mb-1.5 text-[11px] font-semibold text-ink-soft/80">EMT drug bags</p>
+      <div className="mb-3 flex flex-wrap gap-2">
+        {emtBags.map((b) => (
           <button
+            key={b.id}
             type="button"
-            onClick={() => onPick(`DOSERX|MED|${bag.id}|${med.id}`)}
-            className="rounded-lg border border-line bg-surface px-3 py-1.5 text-xs font-semibold"
+            onClick={() => onPick(`DOSERX|BAG|${b.id}`)}
+            className="rounded-lg border border-line bg-surface px-3 py-1.5 text-xs font-semibold hover:border-sea-mid"
           >
-            Scan {med.name.slice(0, 22)}…
+            {b.code}
+            <span className="ml-1 font-medium text-ink-soft/70">· {b.name}</span>
           </button>
+        ))}
+        {emtBags.length === 0 && (
+          <p className="text-xs text-ink-soft">No EMT bags in demo data.</p>
         )}
-        {state.bags
-          .filter((b) => b.activeShiftId)
-          .slice(0, 2)
-          .map((b) => (
-            <button
-              key={b.id}
-              type="button"
-              onClick={() => onPick(`DOSERX|BAG|${b.id}`)}
-              className="rounded-lg border border-amber/40 bg-amber-soft/50 px-3 py-1.5 text-xs font-semibold"
-            >
-              Return {b.code}
-            </button>
-          ))}
       </div>
+
+      {(med || onShift.length > 0) && (
+        <>
+          <p className="mb-1.5 text-[11px] font-semibold text-ink-soft/80">Other demo scans</p>
+          <div className="flex flex-wrap gap-2">
+            {sampleMedBag && med && (
+              <button
+                type="button"
+                onClick={() => onPick(`DOSERX|MED|${sampleMedBag.id}|${med.id}`)}
+                className="rounded-lg border border-line bg-surface px-3 py-1.5 text-xs font-semibold"
+              >
+                Med · {med.name.slice(0, 22)}
+                {med.name.length > 22 ? '…' : ''}
+              </button>
+            )}
+            {onShift.map((b) => (
+              <button
+                key={`return-${b.id}`}
+                type="button"
+                onClick={() => onPick(`DOSERX|BAG|${b.id}`)}
+                className="rounded-lg border border-amber/40 bg-amber-soft/50 px-3 py-1.5 text-xs font-semibold"
+              >
+                Return {b.code}
+              </button>
+            ))}
+          </div>
+        </>
+      )}
     </div>
   )
 }

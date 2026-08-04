@@ -1,6 +1,7 @@
 import { Lock, Shield, UserRound } from 'lucide-react'
 import { useMemo, useState } from 'react'
 import { useApp } from '../context/AppContext'
+import { BusyOverlay } from './BusyOverlay'
 
 type Mode = 'staff' | 'admin'
 
@@ -10,6 +11,7 @@ export function LoginScreen({ onLoggedIn }: { onLoggedIn: (role: Mode) => void }
   const [userId, setUserId] = useState('')
   const [pin, setPin] = useState('')
   const [error, setError] = useState('')
+  const [busy, setBusy] = useState(false)
 
   const options = useMemo(
     () =>
@@ -19,8 +21,9 @@ export function LoginScreen({ onLoggedIn }: { onLoggedIn: (role: Mode) => void }
     [state.staff, mode],
   )
 
-  const submit = (e: React.FormEvent) => {
+  const submit = async (e: React.FormEvent) => {
     e.preventDefault()
+    if (busy) return
     setError('')
 
     if (!userId) {
@@ -52,12 +55,20 @@ export function LoginScreen({ onLoggedIn }: { onLoggedIn: (role: Mode) => void }
       return
     }
 
+    setBusy(true)
+    await new Promise((r) => setTimeout(r, 450))
     setCurrentUser(userId)
     onLoggedIn(mode)
   }
 
   return (
     <div className="flex min-h-screen items-center justify-center px-4 py-10">
+      {busy && (
+        <BusyOverlay
+          label="Signing in…"
+          detail={mode === 'admin' ? 'Opening admin oversight' : 'Opening staff shift actions'}
+        />
+      )}
       <div className="w-full max-w-md">
         <div className="mb-8 text-center">
           <img
@@ -172,9 +183,10 @@ export function LoginScreen({ onLoggedIn }: { onLoggedIn: (role: Mode) => void }
 
               <button
                 type="submit"
-                className="w-full rounded-lg bg-sea py-3 text-sm font-bold text-mint hover:bg-sea-mid"
+                disabled={busy}
+                className="w-full rounded-lg bg-sea py-3 text-sm font-bold text-mint hover:bg-sea-mid disabled:opacity-60"
               >
-                {mode === 'staff' ? 'Sign in as staff' : 'Sign in as admin'}
+                {busy ? 'Signing in…' : mode === 'staff' ? 'Sign in as staff' : 'Sign in as admin'}
               </button>
             </form>
           )}

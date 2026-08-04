@@ -1,10 +1,13 @@
 import { useState } from 'react'
 import { ActivityView } from './components/ActivityView'
 import { AdministerView } from './components/AdministerView'
+import { AdminMapView } from './components/AdminMapView'
 import { BagDetail } from './components/BagDetail'
 import { BagsView } from './components/BagsView'
 import { ControlledDrugsView } from './components/ControlledDrugsView'
 import { Dashboard } from './components/Dashboard'
+import { DiscrepancyView } from './components/DiscrepancyView'
+import { EventPackView } from './components/EventPackView'
 import { FormularyView } from './components/FormularyView'
 import { InventoryCheck } from './components/InventoryCheck'
 import { LoginScreen } from './components/LoginScreen'
@@ -52,6 +55,9 @@ function AppRoutes() {
         <InventoryCheck preferredBagId={selectedBagId ?? undefined} />
       )}
       {view === 'administer' && <AdministerView preferredBagId={selectedBagId ?? undefined} />}
+      {view === 'discrepancies' && <DiscrepancyView />}
+      {view === 'map' && isManagement && <AdminMapView />}
+      {view === 'events' && isManagement && <EventPackView />}
       {view === 'cds' && isManagement && <ControlledDrugsView onOpenBag={openBag} />}
       {view === 'activity' && isManagement && <ActivityView />}
       {view === 'formulary' && isManagement && <FormularyView />}

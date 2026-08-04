@@ -2,7 +2,12 @@ import { createContext, useContext } from 'react'
 import type {
   ActivityLog,
   AppState,
+  DiscrepancyCase,
+  DiscrepancyStatus,
   DrugBag,
+  GeoPoint,
+  PartDoseRecord,
+  PhotoEvidence,
   ShiftAssignment,
   StaffMember,
   StockItem,
@@ -11,6 +16,7 @@ import type {
 
 export interface AppActions {
   setCurrentUser: (id: string | null) => void
+  setSandboxMode: (enabled: boolean) => void
   completeStaffCheck: (
     bagId: string,
     counts: Record<string, number>,
@@ -25,15 +31,18 @@ export interface AppActions {
     witness: StaffMember,
     notes?: string,
   ) => void
-  recordAdministration: (
-    bagId: string,
-    itemId: string,
-    qty: number,
-    practitioner: StaffMember,
-    witness: StaffMember | null,
-    patientRef: string,
-    notes?: string,
-  ) => void
+  recordAdministration: (args: {
+    bagId: string
+    itemId: string
+    qty: number
+    practitioner: StaffMember
+    witness: StaffMember | null
+    patientRef: string
+    notes?: string
+    outOfScope?: boolean
+    partDose?: PartDoseRecord
+    location?: GeoPoint | null
+  }) => void
   recordWaste: (
     bagId: string,
     itemId: string,
@@ -58,6 +67,8 @@ export interface AppActions {
     tagStatus: TagStatus
     medsCheckedOnUntagged?: boolean
     notes?: string
+    photo?: PhotoEvidence
+    location?: GeoPoint | null
   }) => string | null
   returnBagFromShift: (args: {
     bagId: string
@@ -66,7 +77,36 @@ export interface AppActions {
     tagStillIntact: boolean
     tagStatus: TagStatus
     notes?: string
+    photo?: PhotoEvidence
+    location?: GeoPoint | null
   }) => boolean
+  reportDiscrepancy: (args: {
+    bagId: string
+    reporter: StaffMember
+    witness?: StaffMember
+    summary: string
+    details?: string
+    itemNotes?: string
+  }) => string
+  updateDiscrepancy: (args: {
+    id: string
+    status: DiscrepancyStatus
+    actor: StaffMember
+    resolution?: string
+  }) => void
+  createEventPack: (args: {
+    manager: StaffMember
+    name: string
+    grade: 'EMT' | 'Paramedic' | 'AP'
+    controlled: boolean
+    eventName: string
+    startsAt: string
+    endsAt: string
+    vehicle?: string
+  }) => string
+  flushSyncQueue: () => void
+  updateBagLocation: (bagId: string, location: GeoPoint) => void
+  renameBag: (bagId: string, name: string, manager: StaffMember) => boolean
   verifyPin: (staffId: string, pin: string) => boolean
   findStaffByPin: (pin: string) => StaffMember | undefined
   resetDemo: () => void
@@ -80,6 +120,7 @@ export interface AppContextValue extends AppActions {
   getActiveShift: (bagId: string) => ShiftAssignment | undefined
   expiringSoon: (item: StockItem, days?: number) => boolean
   isExpired: (item: StockItem) => boolean
+  openDiscrepancies: DiscrepancyCase[]
 }
 
 export const AppContext = createContext<AppContextValue | null>(null)

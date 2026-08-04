@@ -1,21 +1,41 @@
 import { format } from 'date-fns'
-import { ArrowLeft, Lock, Package } from 'lucide-react'
-import { useState } from 'react'
+import { ArrowLeft, Lock, Package, Pencil } from 'lucide-react'
+import { useEffect, useState } from 'react'
 import { useApp } from '../context/AppContext'
 import { daysUntil } from '../lib/format'
 import { GradeBadge, StatusBadge } from './Badges'
 
 export function BagDetail({ bagId, onBack }: { bagId: string; onBack: () => void }) {
-  const { getBag, isExpired, expiringSoon, currentUser, resignSeal, state } = useApp()
+  const {
+    getBag,
+    isExpired,
+    expiringSoon,
+    currentUser,
+    resignSeal,
+    renameBag,
+    isManagement,
+    state,
+  } = useApp()
   const bag = getBag(bagId)
   const [seal, setSeal] = useState('')
   const [witnessId, setWitnessId] = useState('')
   const [msg, setMsg] = useState('')
+  const [editingName, setEditingName] = useState(false)
+  const [nameDraft, setNameDraft] = useState('')
+
+  useEffect(() => {
+    if (bag) {
+      setNameDraft(bag.name)
+      setEditingName(false)
+    }
+  }, [bag?.id, bag?.name])
 
   if (!bag) {
     return (
       <div>
-        <button type="button" onClick={onBack} className="mb-3 text-sm text-sea-mid">← Back</button>
+        <button type="button" onClick={onBack} className="mb-3 text-sm text-sea-mid">
+          ← Back
+        </button>
         <p>Bag not found.</p>
       </div>
     )
@@ -36,26 +56,108 @@ export function BagDetail({ bagId, onBack }: { bagId: string; onBack: () => void
     setMsg('New seal recorded.')
   }
 
+  const saveName = () => {
+    if (!currentUser || !isManagement) return
+    const trimmed = nameDraft.trim()
+    if (!trimmed) {
+      setMsg('Bag name cannot be empty.')
+      return
+    }
+    if (renameBag(bag.id, trimmed, currentUser)) {
+      setEditingName(false)
+      setMsg(`Bag renamed to “${trimmed}”.`)
+    } else {
+      setMsg('Could not rename bag.')
+    }
+  }
+
   return (
     <div className="space-y-5">
-      <button type="button" onClick={onBack} className="inline-flex items-center gap-1 text-sm font-semibold text-sea-mid hover:underline">
+      <button
+        type="button"
+        onClick={onBack}
+        className="inline-flex items-center gap-1 text-sm font-semibold text-sea-mid hover:underline"
+      >
         <ArrowLeft size={14} /> Back to bags
       </button>
 
       <div className="rounded-xl border border-line bg-panel p-5">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div className="flex items-start gap-3">
-            <div className={`flex h-12 w-12 items-center justify-center rounded-xl ${bag.type === 'controlled' ? 'bg-cd text-white' : 'bg-sea text-mint'}`}>
+            <div
+              className={`flex h-12 w-12 items-center justify-center rounded-xl ${
+                bag.type === 'controlled' ? 'bg-cd text-white' : 'bg-sea text-mint'
+              }`}
+            >
               {bag.type === 'controlled' ? <Lock size={22} /> : <Package size={22} />}
             </div>
-            <div>
+            <div className="min-w-0">
               <h2 className="font-display text-3xl font-extrabold">{bag.code}</h2>
-              <p className="text-ink-soft">{bag.name}</p>
+
+              {editingName && isManagement ? (
+                <div className="mt-1 flex flex-wrap items-center gap-2">
+                  <input
+                    value={nameDraft}
+                    onChange={(e) => setNameDraft(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') saveName()
+                      if (e.key === 'Escape') {
+                        setNameDraft(bag.name)
+                        setEditingName(false)
+                      }
+                    }}
+                    autoFocus
+                    maxLength={80}
+                    className="min-w-[220px] flex-1 rounded-lg border border-line bg-surface px-3 py-1.5 text-sm font-semibold outline-none focus:border-sea-mid"
+                  />
+                  <button
+                    type="button"
+                    onClick={saveName}
+                    className="rounded-lg bg-sea px-3 py-1.5 text-xs font-bold text-mint"
+                  >
+                    Save
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setNameDraft(bag.name)
+                      setEditingName(false)
+                    }}
+                    className="rounded-lg border border-line px-3 py-1.5 text-xs font-semibold"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              ) : (
+                <div className="mt-0.5 flex flex-wrap items-center gap-2">
+                  <p className="text-ink-soft">{bag.name}</p>
+                  {isManagement && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setNameDraft(bag.name)
+                        setEditingName(true)
+                        setMsg('')
+                      }}
+                      className="inline-flex items-center gap-1 rounded-md border border-line bg-surface px-2 py-0.5 text-[11px] font-bold text-sea-mid hover:border-sea-mid"
+                    >
+                      <Pencil size={11} /> Rename
+                    </button>
+                  )}
+                </div>
+              )}
+
               <div className="mt-2 flex flex-wrap gap-2">
-                <GradeBadge grade={bag.grade} controlled={bag.type === 'controlled'} />
+                <GradeBadge
+                  grade={bag.grade}
+                  controlled={bag.type === 'controlled'}
+                  event={bag.type === 'event' || !!bag.eventName}
+                />
                 <StatusBadge status={bag.status} />
                 {bag.assignedVehicle && (
-                  <span className="rounded bg-surface px-2 py-0.5 text-xs font-medium">{bag.assignedVehicle}</span>
+                  <span className="rounded bg-surface px-2 py-0.5 text-xs font-medium">
+                    {bag.assignedVehicle}
+                  </span>
                 )}
               </div>
             </div>
@@ -64,7 +166,8 @@ export function BagDetail({ bagId, onBack }: { bagId: string; onBack: () => void
             <p className="text-ink-soft/70">Current seal</p>
             <p className="font-display text-2xl font-bold">{bag.sealNumber}</p>
             <p className="text-xs text-ink-soft/60">
-              Last check: {bag.lastCheckedAt ? format(new Date(bag.lastCheckedAt), 'dd MMM yyyy HH:mm') : 'Never'}
+              Last check:{' '}
+              {bag.lastCheckedAt ? format(new Date(bag.lastCheckedAt), 'dd MMM yyyy HH:mm') : 'Never'}
               {bag.lastCheckedBy ? ` · ${bag.lastCheckedBy}` : ''}
             </p>
           </div>
@@ -109,7 +212,10 @@ export function BagDetail({ bagId, onBack }: { bagId: string; onBack: () => void
                       <span className={item.quantity < item.parLevel ? 'font-bold text-coral' : 'font-semibold'}>
                         {item.quantity}
                       </span>
-                      <span className="text-ink-soft/50"> / par {item.parLevel} {item.unit}</span>
+                      <span className="text-ink-soft/50">
+                        {' '}
+                        / par {item.parLevel} {item.unit}
+                      </span>
                     </td>
                     <td className="px-4 py-2.5 font-mono text-xs">{item.lotNumber}</td>
                     <td className="px-4 py-2.5">{format(new Date(item.expiryDate), 'MMM yyyy')}</td>

@@ -26,7 +26,22 @@ export function StatusBadge({ status }: { status: BagStatus }) {
   )
 }
 
-export function GradeBadge({ grade, controlled }: { grade: string; controlled?: boolean }) {
+export function GradeBadge({
+  grade,
+  controlled,
+  event,
+}: {
+  grade: string
+  controlled?: boolean
+  event?: boolean
+}) {
+  if (event) {
+    return (
+      <span className="inline-flex items-center rounded bg-amber-soft px-2 py-0.5 text-xs font-bold uppercase tracking-wide text-ink">
+        Event · {grade === 'AP' ? 'AP' : grade}
+      </span>
+    )
+  }
   if (controlled) {
     return (
       <span className="inline-flex items-center rounded bg-cd-soft px-2 py-0.5 text-xs font-bold uppercase tracking-wide text-cd">

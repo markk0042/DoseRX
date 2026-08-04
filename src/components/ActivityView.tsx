@@ -14,8 +14,13 @@ const typeLabels: Record<ActivityType, string> = {
   cd_sign_out: 'CD sign-out',
   cd_sign_in: 'CD sign-in',
   discrepancy: 'Discrepancy',
+  discrepancy_resolved: 'Discrepancy resolved',
   shift_sign_out: 'Shift sign-out',
   shift_return: 'Shift return',
+  sync: 'Sync',
+  event_pack_created: 'Event pack',
+  part_dose: 'Part-dose',
+  bag_renamed: 'Bag renamed',
 }
 
 export function ActivityView() {
@@ -37,8 +42,11 @@ export function ActivityView() {
             'management_stock',
             'inventory_check',
             'administration',
+            'part_dose',
             'waste',
+            'discrepancy',
             'restock',
+            'event_pack_created',
             'seal_check',
           ] as ActivityType[]
         ).map((t) => (
