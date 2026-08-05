@@ -93,6 +93,14 @@ button, input, select, textarea {
   animation: hourglass-turn 1.6s ease-in-out infinite;
 }
 
+/* Contain Leaflet so its high pane z-indexes cannot cover other app views after leaving Live Map */
+.leaflet-container {
+  position: relative;
+  z-index: 0;
+  isolation: isolate;
+  max-width: 100%;
+}
+
 @media print {
   body {
     background: white !important;
