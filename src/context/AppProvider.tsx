@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState, type ReactNode } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { v4 as uuid } from 'uuid'
 import { createInitialBags, createSeedActivityHistory, STAFF } from '../data/seed'
 import { medsForGrade, controlledMedsForGrade } from '../data/formulary'
@@ -13,6 +13,14 @@ import type {
 } from '../types'
 import { CPG_VERSION } from '../types'
 import { AppContext, type AppContextValue } from './AppContext'
+import { isSupabaseSyncEnabled } from '../lib/supabase'
+import {
+  cloudBagCount,
+  pullLiveStateFromCloud,
+  pushLiveStateToCloud,
+  setShiftPhotoPath,
+  uploadEvidencePhoto,
+} from '../lib/supabaseSync'
 
 const LIVE_KEY = 'doserx-v5-live'
 const SANDBOX_KEY = 'doserx-v5-sandbox'
@@ -127,14 +135,101 @@ function stockFromDef(
 
 export function AppProvider({ children }: { children: ReactNode }) {
   const [state, setState] = useState<AppState>(() => loadState(false))
+  const [cloudReady, setCloudReady] = useState(false)
+  const pushTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const stateRef = useRef(state)
+  stateRef.current = state
 
-  const persistWith = useCallback((updater: (prev: AppState) => AppState) => {
-    setState((prev) => {
-      const next = updater(prev)
-      saveState(next)
-      return next
-    })
+  const scheduleCloudPush = useCallback((next: AppState) => {
+    if (!isSupabaseSyncEnabled || next.sandboxMode || offline()) return
+    if (pushTimer.current) clearTimeout(pushTimer.current)
+    pushTimer.current = setTimeout(() => {
+      void pushLiveStateToCloud(next).then((res) => {
+        if (res.ok) {
+          setCloudReady(true)
+          setState((prev) => {
+            if (prev.sandboxMode) return prev
+            const updated = { ...prev, lastSyncedAt: new Date().toISOString() }
+            saveState(updated)
+            return updated
+          })
+        }
+      })
+    }, 1200)
   }, [])
+
+  const persistWith = useCallback(
+    (updater: (prev: AppState) => AppState) => {
+      setState((prev) => {
+        const next = updater(prev)
+        saveState(next)
+        scheduleCloudPush(next)
+        return next
+      })
+    },
+    [scheduleCloudPush],
+  )
+
+  // Hydrate from Supabase on startup (live mode only)
+  useEffect(() => {
+    if (!isSupabaseSyncEnabled) return
+    let cancelled = false
+    ;(async () => {
+      try {
+        const count = await cloudBagCount()
+        if (cancelled) return
+        if (count === 0) {
+          const local = stateRef.current
+          if (!local.sandboxMode) {
+            const res = await pushLiveStateToCloud(local)
+            if (!cancelled) setCloudReady(res.ok)
+          } else if (!cancelled) {
+            setCloudReady(true)
+          }
+          return
+        }
+        const cloud = await pullLiveStateFromCloud()
+        if (cancelled || !cloud?.bags?.length) {
+          setCloudReady(Boolean(cloud))
+          return
+        }
+        setState((prev) => {
+          if (prev.sandboxMode) return prev
+          const next: AppState = {
+            ...prev,
+            staff: cloud.staff?.length ? cloud.staff : prev.staff,
+            bags: cloud.bags ?? prev.bags,
+            shifts: cloud.shifts ?? prev.shifts,
+            activities: cloud.activities?.length ? cloud.activities : prev.activities,
+            discrepancies: cloud.discrepancies ?? prev.discrepancies,
+            lastSyncedAt: cloud.lastSyncedAt ?? new Date().toISOString(),
+          }
+          saveState(next)
+          return next
+        })
+        setCloudReady(true)
+      } catch {
+        if (!cancelled) setCloudReady(false)
+      }
+    })()
+    return () => {
+      cancelled = true
+      if (pushTimer.current) clearTimeout(pushTimer.current)
+    }
+  }, [])
+
+  // When coming back online, push queued local state
+  useEffect(() => {
+    const onOnline = () => {
+      const s = stateRef.current
+      if (!s.sandboxMode) scheduleCloudPush(s)
+    }
+    window.addEventListener('online', onOnline)
+    return () => window.removeEventListener('online', onOnline)
+  }, [scheduleCloudPush])
+
+  // silence unused in non-management paths — used for readiness signal
+  void cloudReady
 
   const pushActivity = useCallback((prev: AppState, activity: Omit<ActivityLog, 'id' | 'timestamp' | 'synced'>): AppState => {
     const isOff = offline()
@@ -530,6 +625,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
             photoIds: photo ? [photo.id] : undefined,
           })
         })
+        if (created && photo && isSupabaseSyncEnabled && !stateRef.current.sandboxMode) {
+          void uploadEvidencePhoto(photo, { bagId, uploadedBy: holder.id }).then((path) => {
+            if (path && created) void setShiftPhotoPath(created, 'out', path)
+          })
+        }
         return created
       },
 
@@ -544,11 +644,13 @@ export function AppProvider({ children }: { children: ReactNode }) {
         location,
       }) => {
         let ok = false
+        let shiftIdForPhoto: string | null = null
         persistWith((prev) => {
           const bag = prev.bags.find((b) => b.id === bagId)
           if (!bag?.activeShiftId || returner.id === witness.id) return prev
           ok = true
           const shiftId = bag.activeShiftId
+          shiftIdForPhoto = shiftId
           let next: AppState = {
             ...prev,
             shifts: prev.shifts.map((s) =>
@@ -604,6 +706,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
             photoIds: photo ? [photo.id] : undefined,
           })
         })
+        if (ok && photo && shiftIdForPhoto && isSupabaseSyncEnabled && !stateRef.current.sandboxMode) {
+          void uploadEvidencePhoto(photo, { bagId, uploadedBy: returner.id }).then((path) => {
+            if (path && shiftIdForPhoto) void setShiftPhotoPath(shiftIdForPhoto, 'return', path)
+          })
+        }
         return ok
       },
 
@@ -734,6 +841,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
             practitionerName: 'System',
             notes: `Flushed offline queue · ${prev.pendingSync.length} item(s)`,
           })
+        })
+        void pushLiveStateToCloud(stateRef.current).then((res) => {
+          if (res.ok) setCloudReady(true)
         })
       },
 

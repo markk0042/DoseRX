@@ -422,7 +422,7 @@ export async function downloadAnalyticsPdf(report: AnalyticsReport, sandboxMode:
   doc.text('2 | Activity mix & clinical grade', 14, 14)
 
   y = sectionTitle(doc, 'Activity mix', 32)
-  const mix = report.byActivityType.slice(0, 8)
+  const mix = report.byActivityType.slice(0, 6)
   if (mix.length) {
     y = drawHBars(doc, mix, 14, y, w - 28, SEA)
   } else {
@@ -432,7 +432,7 @@ export async function downloadAnalyticsPdf(report: AnalyticsReport, sandboxMode:
     y += 10
   }
 
-  y = Math.max(y + 6, 118)
+  y += 10
   const leftX = 14
   const rightX = 14 + colW + colGap
 
@@ -446,20 +446,18 @@ export async function downloadAnalyticsPdf(report: AnalyticsReport, sandboxMode:
   doc.text('Administrations & part-dose given', rightX, y + 10)
 
   const barsY = y + 16
-  drawHBars(doc, report.byGradeShift, leftX, barsY, colW, OK)
-  drawHBars(doc, report.byGradeAdministered, rightX, barsY, colW, ADMIN_BLUE)
+  const endShift = drawHBars(doc, report.byGradeShift, leftX, barsY, colW, OK)
+  const endAdmin = drawHBars(doc, report.byGradeAdministered, rightX, barsY, colW, ADMIN_BLUE)
+  y = Math.max(endShift, endAdmin) + 10
 
-  y = barsY + Math.max(report.byGradeShift.length, report.byGradeAdministered.length, 3) * 11 + 8
-
-  sectionTitle(doc, 'Wasted by grade', y, leftX)
+  y = sectionTitle(doc, 'Wasted by grade', y, leftX)
   doc.setFont('helvetica', 'normal')
   doc.setFontSize(7.5)
   doc.setTextColor(...SEA_MID)
-  doc.text('Waste events by practitioner grade', leftX, y + 10)
-  y = drawHBars(doc, report.byGradeWaste, leftX, y + 16, colW, WASTE_TEAL)
+  doc.text('Waste events by practitioner grade', leftX, y)
+  y = drawHBars(doc, report.byGradeWaste, leftX, y + 6, colW, WASTE_TEAL)
 
-  y = Math.max(y + 4, 210)
-  if (y > 230) y = 210
+  y += 10
   y = sectionTitle(doc, 'Grade breakdown table', y)
   autoTable(doc, {
     startY: y,
@@ -501,28 +499,27 @@ export async function downloadAnalyticsPdf(report: AnalyticsReport, sandboxMode:
   doc.text('Units wasted (not given)', rightX, y + 10)
 
   const medBarsY = y + 16
+  let endMedL = medBarsY + 8
+  let endMedR = medBarsY + 8
   if (report.topMedsAdministered.length) {
-    drawHBars(doc, report.topMedsAdministered, leftX, medBarsY, colW, ADMIN_BLUE)
+    endMedL = drawHBars(doc, report.topMedsAdministered, leftX, medBarsY, colW, ADMIN_BLUE)
   } else {
     doc.setFontSize(8)
     doc.setTextColor(...SEA_MID)
     doc.text('No administrations in period.', leftX, medBarsY + 4)
   }
   if (report.topMedsWasted.length) {
-    drawHBars(doc, report.topMedsWasted, rightX, medBarsY, colW, WASTE_TEAL)
+    endMedR = drawHBars(doc, report.topMedsWasted, rightX, medBarsY, colW, WASTE_TEAL)
   } else {
     doc.setFontSize(8)
     doc.setTextColor(...SEA_MID)
     doc.text('No waste events in period.', rightX, medBarsY + 4)
   }
 
-  y =
-    medBarsY +
-    Math.max(report.topMedsAdministered.length, report.topMedsWasted.length, 1) * 11 +
-    10
+  y = Math.max(endMedL, endMedR) + 10
 
   autoTable(doc, {
-    startY: Math.min(y, 120),
+    startY: y,
     head: [['Medication', 'Administered', 'Wasted', 'Total units']],
     body: (() => {
       const names = new Set([
@@ -546,8 +543,8 @@ export async function downloadAnalyticsPdf(report: AnalyticsReport, sandboxMode:
     margin: { left: 14, right: 14 },
   })
 
-  y = ((doc as DocX).lastAutoTable?.finalY ?? 150) + 10
-  y = sectionTitle(doc, 'Bag shift register (period sample)', Math.min(Math.max(y, 150), 175))
+  y = ((doc as DocX).lastAutoTable?.finalY ?? y) + 10
+  y = sectionTitle(doc, 'Bag shift register (period sample)', y)
   autoTable(doc, {
     startY: y,
     head: [['Bag', 'Holder', 'Grade', 'Signed out', 'Returned', 'Status']],

@@ -1,19 +1,24 @@
-import { CloudOff, RefreshCw, Wifi } from 'lucide-react'
+import { Cloud, CloudOff, RefreshCw, Wifi } from 'lucide-react'
 import { useApp } from '../context/AppContext'
 import { useOnlineStatus } from '../lib/offline'
+import { isSupabaseSyncEnabled } from '../lib/supabase'
 
 export function OfflineBanner() {
   const online = useOnlineStatus()
   const { state, flushSyncQueue, isManagement } = useApp()
   const pending = state.pendingSync.length
 
-  if (online && pending === 0 && !state.sandboxMode) return null
+  if (online && pending === 0 && !state.sandboxMode && !isSupabaseSyncEnabled) return null
+  if (online && pending === 0 && !state.sandboxMode && isSupabaseSyncEnabled && !isManagement) {
+    // Staff: stay quiet unless offline / sandbox
+    if (!state.sandboxMode) return null
+  }
 
   return (
     <div className="mb-4 space-y-2">
       {state.sandboxMode && (
         <div className="rounded-lg border border-amber/40 bg-amber-soft/70 px-3 py-2 text-sm font-semibold text-ink">
-          Training / sandbox mode — fake stock only. Live CDs are untouched.
+          Training / sandbox mode — fake stock only. Live CDs are untouched. (Not synced to Supabase.)
         </div>
       )}
       {!online && (
@@ -36,8 +41,14 @@ export function OfflineBanner() {
           </button>
         </div>
       )}
-      {online && state.lastSyncedAt && isManagement && pending === 0 && (
-        <p className="text-[11px] text-ink-soft/70">Last sync {new Date(state.lastSyncedAt).toLocaleString()}</p>
+      {online && isSupabaseSyncEnabled && isManagement && !state.sandboxMode && pending === 0 && (
+        <div className="flex flex-wrap items-center gap-2 text-[11px] text-ink-soft/70">
+          <Cloud size={12} className="text-sea" />
+          <span>
+            Supabase sync on
+            {state.lastSyncedAt ? ` · last sync ${new Date(state.lastSyncedAt).toLocaleString()}` : ''}
+          </span>
+        </div>
       )}
     </div>
   )
