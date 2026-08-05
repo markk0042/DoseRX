@@ -1,5 +1,7 @@
-import { AlertTriangle, CheckCircle2, Lock, Package, Timer } from 'lucide-react'
+import { AlertTriangle, CheckCircle2, Lock, Package, Syringe, Timer, Users } from 'lucide-react'
+import { useMemo } from 'react'
 import { useApp } from '../context/AppContext'
+import { buildOversightAlerts } from '../lib/oversightAlerts'
 import { BagCard } from './BagCard'
 import type { View } from './Shell'
 
@@ -14,11 +16,12 @@ export function Dashboard({
   const bags = state.bags
   const cdBags = bags.filter((b) => b.type === 'controlled')
   const standard = bags.filter((b) => b.type === 'standard')
-  const allItems = bags.flatMap((b) => b.items)
-  const expired = allItems.filter(isExpired).length
-  const soon = allItems.filter((i) => !isExpired(i) && expiringSoon(i)).length
+  const alerts = useMemo(
+    () => buildOversightAlerts(state, { isExpired, expiringSoon }),
+    [state, isExpired, expiringSoon],
+  )
+  const onShiftBags = bags.filter((b) => b.status === 'on_shift')
   const due = bags.filter((b) => b.status === 'check_due' || b.status === 'discrepancy')
-  const onShift = bags.filter((b) => b.status === 'on_shift')
 
   const byGrade = {
     EMT: bags.filter((b) => b.grade === 'EMT' && b.type === 'standard').length,
@@ -30,10 +33,124 @@ export function Dashboard({
   return (
     <div className="space-y-6">
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-        <Stat icon={Package} label="Total bags" value={String(bags.length)} sub={`${onShift.length} currently on shift`} />
-        <Stat icon={Lock} label="Controlled drug pouches" value={String(cdBags.length)} sub="Paramedic + AP CDs" accent="cd" />
-        <Stat icon={Timer} label="Expiring ≤90 days" value={String(soon)} sub={`${expired} already expired`} accent="amber" />
-        <Stat icon={AlertTriangle} label="Attention needed" value={String(due.length)} sub="Checks & discrepancies" accent="coral" />
+        <Stat
+          icon={Users}
+          label="On shift"
+          value={String(alerts.onShift)}
+          sub="Bags currently signed out"
+          accent="sea"
+        />
+        <Stat
+          icon={Package}
+          label="Total bags"
+          value={String(bags.length)}
+          sub={`${standard.length} standard · ${cdBags.length} CD`}
+        />
+        <Stat
+          icon={Timer}
+          label="Expiring ≤90 days"
+          value={String(alerts.expiringSoonMedications)}
+          sub={`${alerts.expiredMedications} already expired`}
+          accent="amber"
+        />
+        <Stat
+          icon={AlertTriangle}
+          label="Active alerts"
+          value={String(alerts.total)}
+          sub="Reviews, discrepancies, expiry, waste"
+          accent="coral"
+        />
+      </div>
+
+      <div className="grid gap-4 lg:grid-cols-3">
+        <div className="rounded-xl border border-line bg-panel p-4 lg:col-span-2">
+          <div className="mb-3 flex items-center justify-between gap-2">
+            <h2 className="font-display text-2xl font-bold">Bags on shift</h2>
+            <button
+              type="button"
+              onClick={() => setView('map')}
+              className="text-sm font-semibold text-sea-mid hover:underline"
+            >
+              Live map
+            </button>
+          </div>
+          {onShiftBags.length === 0 ? (
+            <p className="rounded-lg bg-surface px-3 py-4 text-sm text-ink-soft">No bags signed out right now.</p>
+          ) : (
+            <ul className="grid gap-2 sm:grid-cols-2">
+              {onShiftBags.map((b) => {
+                const shift = state.shifts.find((s) => s.bagId === b.id && s.active)
+                return (
+                  <li key={b.id}>
+                    <button
+                      type="button"
+                      onClick={() => onOpenBag(b.id)}
+                      className="flex w-full items-center justify-between rounded-lg border border-line bg-surface px-3 py-2.5 text-left text-sm hover:border-sea-mid"
+                    >
+                      <div>
+                        <p className="font-semibold">{b.code}</p>
+                        <p className="text-xs text-ink-soft">{shift?.holderName ?? 'On shift'}</p>
+                      </div>
+                      <span className="text-[10px] font-bold uppercase tracking-wide text-sea">Out</span>
+                    </button>
+                  </li>
+                )
+              })}
+            </ul>
+          )}
+        </div>
+
+        <div className="rounded-xl border border-coral/20 bg-coral-soft/30 p-4">
+          <h2 className="mb-1 font-display text-xl font-bold text-coral">Alerts</h2>
+          <p className="mb-3 text-xs text-ink-soft">Exceptions only — not bags on shift</p>
+          {alerts.total === 0 ? (
+            <div className="flex items-center gap-2 rounded-lg bg-ok-soft px-3 py-3 text-sm text-ok">
+              <CheckCircle2 size={16} /> No active alerts
+            </div>
+          ) : (
+            <ul className="space-y-2 text-sm">
+              {alerts.openDiscrepancies > 0 && (
+                <AlertRow
+                  label="Open discrepancies"
+                  count={alerts.openDiscrepancies}
+                  onClick={() => setView('discrepancies')}
+                />
+              )}
+              {alerts.bagReviewsDue > 0 && (
+                <AlertRow label="Bag reviews due" count={alerts.bagReviewsDue} onClick={() => setView('check')} />
+              )}
+              {alerts.bagsWithDiscrepancyStatus > 0 && (
+                <AlertRow
+                  label="Bags flagged discrepancy"
+                  count={alerts.bagsWithDiscrepancyStatus}
+                  onClick={() => setView('bags')}
+                />
+              )}
+              {alerts.expiredMedications > 0 && (
+                <AlertRow
+                  label="Expired medications"
+                  count={alerts.expiredMedications}
+                  onClick={() => setView('stock')}
+                />
+              )}
+              {alerts.expiringSoonMedications > 0 && (
+                <AlertRow
+                  label="Expiring ≤90 days"
+                  count={alerts.expiringSoonMedications}
+                  onClick={() => setView('stock')}
+                />
+              )}
+              {alerts.recentWastes > 0 && (
+                <AlertRow
+                  label="Waste / part-dose (24h)"
+                  count={alerts.recentWastes}
+                  onClick={() => setView('activity')}
+                  icon
+                />
+              )}
+            </ul>
+          )}
+        </div>
       </div>
 
       <div className="grid gap-4 lg:grid-cols-3">
@@ -85,7 +202,10 @@ export function Dashboard({
           </div>
 
           <div className="rounded-xl border border-cd/20 bg-cd-soft/40 p-4">
-            <h2 className="mb-1 font-display text-xl font-bold text-cd">Controlled drugs</h2>
+            <div className="mb-1 flex items-center gap-2">
+              <Lock size={16} className="text-cd" />
+              <h2 className="font-display text-xl font-bold text-cd">Controlled drugs</h2>
+            </div>
             <p className="mb-3 text-xs text-ink-soft/80">
               Midazolam (P & AP) · Morphine, Fentanyl, Ketamine, Diazepam, Lorazepam (AP)
             </p>
@@ -143,11 +263,17 @@ export function Dashboard({
                 <p className="font-display text-lg font-bold">
                   {grade === 'AP' ? 'Advanced Paramedic' : grade}
                 </p>
-                <p className="mb-2 text-xs text-ink-soft/70">{gradeBags.length} bags · {gradeBags[0]?.items.length ?? 0} meds each</p>
+                <p className="mb-2 text-xs text-ink-soft/70">
+                  {gradeBags.length} bags · {gradeBags[0]?.items.length ?? 0} meds each
+                </p>
                 <ul className="space-y-1">
                   {gradeBags.map((b) => (
                     <li key={b.id}>
-                      <button type="button" onClick={() => onOpenBag(b.id)} className="text-sm font-medium text-sea-mid hover:underline">
+                      <button
+                        type="button"
+                        onClick={() => onOpenBag(b.id)}
+                        className="text-sm font-medium text-sea-mid hover:underline"
+                      >
                         {b.code}
                       </button>
                     </li>
@@ -162,6 +288,34 @@ export function Dashboard({
   )
 }
 
+function AlertRow({
+  label,
+  count,
+  onClick,
+  icon,
+}: {
+  label: string
+  count: number
+  onClick: () => void
+  icon?: boolean
+}) {
+  return (
+    <li>
+      <button
+        type="button"
+        onClick={onClick}
+        className="flex w-full items-center justify-between rounded-lg border border-coral/20 bg-panel px-3 py-2 text-left hover:border-coral/40"
+      >
+        <span className="inline-flex items-center gap-1.5 font-semibold text-ink">
+          {icon ? <Syringe size={14} className="text-coral" /> : <AlertTriangle size={14} className="text-coral" />}
+          {label}
+        </span>
+        <span className="font-display text-lg font-bold text-coral">{count}</span>
+      </button>
+    </li>
+  )
+}
+
 function Stat({
   icon: Icon,
   label,
@@ -173,7 +327,7 @@ function Stat({
   label: string
   value: string
   sub: string
-  accent?: 'cd' | 'amber' | 'coral'
+  accent?: 'cd' | 'amber' | 'coral' | 'sea'
 }) {
   const ring =
     accent === 'cd'
@@ -182,7 +336,9 @@ function Stat({
         ? 'border-amber/30 bg-amber-soft/40'
         : accent === 'coral'
           ? 'border-coral/25 bg-coral-soft/40'
-          : 'border-line bg-panel'
+          : accent === 'sea'
+            ? 'border-sea/20 bg-mint/50'
+            : 'border-line bg-panel'
   return (
     <div className={`rounded-xl border p-4 shadow-sm ${ring}`}>
       <div className="mb-2 flex items-center gap-2 text-ink-soft">

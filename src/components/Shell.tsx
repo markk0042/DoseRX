@@ -24,6 +24,7 @@ import {
 import { useEffect, useMemo, useState } from 'react'
 import { useApp } from '../context/AppContext'
 import { downloadCdRegisterPdf } from '../lib/cdRegisterPdf'
+import { buildOversightAlerts } from '../lib/oversightAlerts'
 import { OfflineBanner } from './OfflineBanner'
 
 export type View =
@@ -81,13 +82,17 @@ export function Shell({
   setView: (v: View) => void
   children: React.ReactNode
 }) {
-  const { currentUser, setCurrentUser, state, resetDemo, isManagement, setSandboxMode } = useApp()
+  const { currentUser, setCurrentUser, state, resetDemo, isManagement, setSandboxMode, isExpired, expiringSoon } =
+    useApp()
   const [menuOpen, setMenuOpen] = useState(false)
-  const onShiftCount = state.bags.filter((b) => b.status === 'on_shift').length
-  const openDiscrepancyCount = state.discrepancies.filter((d) => d.status !== 'resolved').length
-  const alerts =
-    state.bags.filter((b) => b.status === 'check_due' || b.status === 'discrepancy').length +
-    openDiscrepancyCount
+
+  const oversight = useMemo(
+    () => buildOversightAlerts(state, { isExpired, expiringSoon }),
+    [state, isExpired, expiringSoon],
+  )
+  const alerts = oversight.total
+  const openDiscrepancyCount = oversight.openDiscrepancies
+  const onShiftCount = oversight.onShift
 
   const visibleNav = nav.filter((item) => {
     if (item.adminOnly && !isManagement) return false
@@ -142,19 +147,13 @@ export function Shell({
               {currentUser ? ` · ${currentUser.name.split(' ')[0]}` : ''}
             </p>
           </div>
-          {(onShiftCount > 0 || alerts > 0) && (
-            <div className="flex shrink-0 items-center gap-1.5">
-              {onShiftCount > 0 && (
-                <span className="rounded-md bg-mint/15 px-1.5 py-0.5 text-[10px] font-bold text-mint">
-                  {onShiftCount} out
-                </span>
-              )}
-              {alerts > 0 && (
-                <span className="rounded-md bg-coral px-1.5 py-0.5 text-[10px] font-bold text-white">
-                  {alerts}
-                </span>
-              )}
-            </div>
+          {alerts > 0 && (
+            <span
+              className="shrink-0 rounded-md bg-coral px-1.5 py-0.5 text-[10px] font-bold text-white"
+              title="Discrepancies, bag reviews, expiries, recent waste"
+            >
+              {alerts} alert{alerts === 1 ? '' : 's'}
+            </span>
           )}
           <button
             type="button"
@@ -387,18 +386,18 @@ export function Shell({
                 : 'Offline-capable bag sign-out, administer/waste, and discrepancy reporting. Witness uses PIN.'}
             </p>
           </div>
-          <div className="hidden items-center gap-3 sm:flex">
-            {isManagement && onShiftCount > 0 && (
-              <div className="inline-flex items-center gap-1.5 rounded-lg bg-sea/10 px-3 py-1.5 text-sm font-semibold text-sea">
+          <div className="flex flex-wrap items-center gap-2 sm:gap-3">
+            {isManagement && (
+              <div className="inline-flex items-center gap-1.5 rounded-lg bg-sea/10 px-2.5 py-1.5 text-xs font-semibold text-sea sm:px-3 sm:text-sm">
                 {onShiftCount} on shift
               </div>
             )}
             {isManagement && alerts > 0 && (
-              <div className="inline-flex items-center gap-1.5 rounded-lg bg-coral-soft px-3 py-1.5 text-sm font-semibold text-coral">
+              <div className="inline-flex items-center gap-1.5 rounded-lg bg-coral-soft px-2.5 py-1.5 text-xs font-semibold text-coral sm:px-3 sm:text-sm">
                 <AlertTriangle size={14} /> {alerts} alert{alerts > 1 ? 's' : ''}
               </div>
             )}
-            <p className="text-xs text-ink-soft/60">{format(new Date(), 'EEE d MMM yyyy · HH:mm')}</p>
+            <p className="text-[10px] text-ink-soft/60 sm:text-xs">{format(new Date(), 'EEE d MMM yyyy · HH:mm')}</p>
           </div>
         </header>
 
