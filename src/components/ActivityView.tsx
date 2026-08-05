@@ -5,8 +5,9 @@ import type { ActivityType } from '../types'
 
 const typeLabels: Record<ActivityType, string> = {
   inventory_check: 'Staff check',
+  bag_audit: 'Bag audit',
   management_stock: 'Management stock',
-  seal_check: 'Seal change',
+  seal_check: 'Seal / reseal',
   administration: 'Administration',
   waste: 'Waste',
   restock: 'Restock',
@@ -39,6 +40,7 @@ export function ActivityView() {
           [
             'shift_sign_out',
             'shift_return',
+            'bag_audit',
             'management_stock',
             'inventory_check',
             'administration',

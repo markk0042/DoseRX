@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { ActivityView } from './components/ActivityView'
 import { AdministerView } from './components/AdministerView'
 import { AdminMapView } from './components/AdminMapView'
+import { AnalyticsView } from './components/AnalyticsView'
 import { BagDetail } from './components/BagDetail'
 import { BagsView } from './components/BagsView'
 import { ControlledDrugsView } from './components/ControlledDrugsView'
@@ -60,6 +61,7 @@ function AppRoutes() {
       {view === 'events' && isManagement && <EventPackView />}
       {view === 'cds' && isManagement && <ControlledDrugsView onOpenBag={openBag} />}
       {view === 'activity' && isManagement && <ActivityView />}
+      {view === 'analytics' && isManagement && <AnalyticsView />}
       {view === 'formulary' && isManagement && <FormularyView />}
     </Shell>
   )

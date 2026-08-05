@@ -5,6 +5,7 @@ import { useApp } from '../context/AppContext'
 import { daysUntil } from '../lib/format'
 import type { ClinicalGrade, DrugBag } from '../types'
 import { GradeBadge, StatusBadge } from './Badges'
+import { StockItemCard } from './QuantityAmpoules'
 
 export function EventPackView() {
   const { currentUser, isManagement, createEventPack, state, isExpired, expiringSoon } = useApp()
@@ -239,77 +240,54 @@ function PackSection({
                   {b.items.length === 0 ? (
                     <p className="px-3 py-4 text-sm text-ink-soft">No medications in this pack.</p>
                   ) : (
-                    <div className="overflow-x-auto">
-                      <table className="w-full min-w-[640px] text-left text-sm">
-                        <thead className="bg-sea/5 text-[11px] uppercase tracking-wide text-ink-soft">
-                          <tr>
-                            <th className="px-3 py-2 font-semibold">Medication</th>
-                            <th className="px-3 py-2 font-semibold">Presentation</th>
-                            <th className="px-3 py-2 font-semibold">Qty</th>
-                            <th className="px-3 py-2 font-semibold">Batch / lot</th>
-                            <th className="px-3 py-2 font-semibold">Expiry</th>
-                            <th className="px-3 py-2 font-semibold">Status</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {b.items.map((item) => {
-                            const itemExpired = isExpired(item)
-                            const soon = !itemExpired && expiringSoon(item)
-                            const days = daysUntil(item.expiryDate)
-                            return (
-                              <tr key={item.id} className="border-t border-line/70">
-                                <td className="px-3 py-2 font-semibold">
-                                  {item.name}
-                                  {item.controlled && (
-                                    <span className="ml-1.5 text-[10px] font-bold uppercase text-cd">
-                                      CD{item.schedule ? ` Sch ${item.schedule}` : ''}
-                                    </span>
-                                  )}
-                                </td>
-                                <td className="px-3 py-2 text-ink-soft">{item.presentation}</td>
-                                <td className="px-3 py-2 font-semibold">
-                                  {item.quantity}{' '}
-                                  <span className="text-xs font-medium text-ink-soft">{item.unit}</span>
-                                </td>
-                                <td className="px-3 py-2 font-mono text-xs font-bold tracking-wide">
-                                  {item.lotNumber || '—'}
-                                </td>
-                                <td className="px-3 py-2">
-                                  {format(new Date(item.expiryDate), 'dd MMM yyyy')}
-                                  <span className="block text-[10px] text-ink-soft/70">
-                                    {itemExpired ? 'Expired' : days === 0 ? 'Today' : `${days}d`}
-                                  </span>
-                                </td>
-                                <td className="px-3 py-2">
-                                  <span
-                                    className={`rounded px-1.5 py-0.5 text-[10px] font-bold uppercase ${
-                                      itemExpired
-                                        ? 'bg-coral-soft text-coral'
-                                        : soon
-                                          ? 'bg-amber-soft text-ink'
-                                          : item.quantity <= 0
-                                            ? 'bg-coral-soft text-coral'
-                                            : item.quantity < item.parLevel
-                                              ? 'bg-amber-soft text-ink'
-                                              : 'bg-ok-soft text-ok'
-                                    }`}
-                                  >
-                                    {itemExpired
-                                      ? 'Expired'
-                                      : item.quantity <= 0
-                                        ? 'Empty'
-                                        : soon
-                                          ? 'Expiring'
-                                          : item.quantity < item.parLevel
-                                            ? 'Low'
-                                            : 'OK'}
-                                  </span>
-                                </td>
-                              </tr>
-                            )
-                          })}
-                        </tbody>
-                      </table>
+                    <div className="grid gap-2 p-3 sm:grid-cols-2">
+                      {b.items.map((item) => {
+                        const itemExpired = isExpired(item)
+                        const soon = !itemExpired && expiringSoon(item)
+                        const days = daysUntil(item.expiryDate)
+                        const status = (
+                          <span
+                            className={`rounded px-1.5 py-0.5 text-[10px] font-bold uppercase ${
+                              itemExpired
+                                ? 'bg-coral-soft text-coral'
+                                : soon
+                                  ? 'bg-amber-soft text-ink'
+                                  : item.quantity <= 0
+                                    ? 'bg-coral-soft text-coral'
+                                    : item.quantity < item.parLevel
+                                      ? 'bg-amber-soft text-ink'
+                                      : 'bg-ok-soft text-ok'
+                            }`}
+                          >
+                            {itemExpired
+                              ? 'Expired'
+                              : item.quantity <= 0
+                                ? 'Empty'
+                                : soon
+                                  ? 'Expiring'
+                                  : item.quantity < item.parLevel
+                                    ? 'Low'
+                                    : 'OK'}
+                          </span>
+                        )
+                        return (
+                          <StockItemCard
+                            key={item.id}
+                            name={item.name}
+                            presentation={item.presentation}
+                            quantity={item.quantity}
+                            parLevel={item.parLevel}
+                            unit={item.unit}
+                            lotNumber={item.lotNumber}
+                            expiryLabel={`${format(new Date(item.expiryDate), 'dd MMM yyyy')}${
+                              itemExpired ? '' : days === 0 ? ' · today' : ` · ${days}d`
+                            }`}
+                            controlled={item.controlled}
+                            schedule={item.schedule}
+                            status={status}
+                          />
+                        )
+                      })}
                     </div>
                   )}
                 </div>

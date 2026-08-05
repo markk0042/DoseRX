@@ -8,6 +8,7 @@ import { parseQrPayload } from '../lib/qr'
 import type { PhotoEvidence, StaffMember, TagStatus } from '../types'
 import { PhotoCapture } from './PhotoCapture'
 import { BusyOverlay } from './BusyOverlay'
+import { StockItemCard, QuantityAmpoules } from './QuantityAmpoules'
 import { QrScanner } from './QrScanner'
 import { WitnessVerify } from './WitnessVerify'
 
@@ -188,7 +189,7 @@ export function ScanFlowView() {
       return
     }
     if (!patientRef.trim() || !dose || !route || !indication) {
-      setMsg('Patient ref, dose, route and indication are required.')
+      setMsg('CAD / incident number, dose, route and indication are required.')
       return
     }
     if (!adminWitness) {
@@ -331,61 +332,47 @@ export function ScanFlowView() {
             </button>
           </div>
 
-          <div className="overflow-hidden rounded-xl border border-line">
-            <table className="w-full min-w-[560px] text-left text-sm">
-              <thead className="bg-sea/5 text-xs uppercase tracking-wide text-ink-soft">
-                <tr>
-                  <th className="px-3 py-2 font-semibold">Medication</th>
-                  <th className="px-3 py-2 font-semibold">On hand</th>
-                  <th className="px-3 py-2 font-semibold">Batch</th>
-                  <th className="px-3 py-2 font-semibold">Expiry</th>
-                  <th className="px-3 py-2 font-semibold">Status</th>
-                </tr>
-              </thead>
-              <tbody>
-                {bag.items.map((item) => {
-                  const expired = isExpired(item)
-                  const soon = !expired && expiringSoon(item)
-                  return (
-                    <tr key={item.id} className="border-t border-line/70">
-                      <td className="px-3 py-2.5">
-                        <p className="font-semibold">
-                          {item.name}
-                          {item.controlled && (
-                            <span className="ml-1.5 rounded bg-cd-soft px-1.5 py-0.5 text-[10px] font-bold text-cd">
-                              Sch {item.schedule}
-                            </span>
-                          )}
-                        </p>
-                        <p className="text-xs text-ink-soft">{item.presentation}</p>
-                      </td>
-                      <td className="px-3 py-2.5 font-semibold">
-                        {item.quantity}{' '}
-                        <span className="font-normal text-ink-soft">{item.unit}</span>
-                        <span className="block text-xs font-normal text-ink-soft/70">
-                          par {item.parLevel}
-                        </span>
-                      </td>
-                      <td className="px-3 py-2.5 font-mono text-xs">{item.lotNumber}</td>
-                      <td className="px-3 py-2.5">{format(new Date(item.expiryDate), 'MMM yyyy')}</td>
-                      <td className="px-3 py-2.5">
-                        {expired ? (
-                          <span className="text-xs font-semibold text-coral">Expired</span>
-                        ) : soon ? (
-                          <span className="text-xs font-semibold text-ink">Expiring soon</span>
-                        ) : item.quantity === 0 ? (
-                          <span className="text-xs font-semibold text-coral">Empty</span>
-                        ) : item.quantity < item.parLevel ? (
-                          <span className="text-xs font-semibold text-ink">Below par</span>
-                        ) : (
-                          <span className="text-xs font-semibold text-ok">OK</span>
-                        )}
-                      </td>
-                    </tr>
-                  )
-                })}
-              </tbody>
-            </table>
+          <div className="grid gap-2.5">
+            {bag.items.map((item) => {
+              const expired = isExpired(item)
+              const soon = !expired && expiringSoon(item)
+              const status = expired ? (
+                <span className="rounded bg-coral-soft px-2 py-0.5 text-[10px] font-bold uppercase text-coral">
+                  Expired
+                </span>
+              ) : soon ? (
+                <span className="rounded bg-amber-soft px-2 py-0.5 text-[10px] font-bold uppercase text-ink">
+                  Expiring
+                </span>
+              ) : item.quantity === 0 ? (
+                <span className="rounded bg-coral-soft px-2 py-0.5 text-[10px] font-bold uppercase text-coral">
+                  Empty
+                </span>
+              ) : item.quantity < item.parLevel ? (
+                <span className="rounded bg-amber-soft px-2 py-0.5 text-[10px] font-bold uppercase text-ink">
+                  Below par
+                </span>
+              ) : (
+                <span className="rounded bg-ok-soft px-2 py-0.5 text-[10px] font-bold uppercase text-ok">
+                  OK
+                </span>
+              )
+              return (
+                <StockItemCard
+                  key={item.id}
+                  name={item.name}
+                  presentation={item.presentation}
+                  quantity={item.quantity}
+                  parLevel={item.parLevel}
+                  unit={item.unit}
+                  lotNumber={item.lotNumber}
+                  expiryLabel={format(new Date(item.expiryDate), 'MMM yyyy')}
+                  controlled={item.controlled}
+                  schedule={item.schedule}
+                  status={status}
+                />
+              )
+            })}
           </div>
 
           <div className="flex flex-wrap gap-2">
@@ -609,10 +596,16 @@ export function ScanFlowView() {
           </div>
 
           <dl className="grid grid-cols-2 gap-3 text-sm">
-            <div className="rounded-lg bg-surface p-3">
-              <dt className="text-xs uppercase text-ink-soft">On hand</dt>
-              <dd className="font-display text-2xl font-bold">
-                {item.quantity} <span className="text-sm font-medium">{item.unit}</span>
+            <div className="rounded-lg bg-surface p-3 sm:col-span-2">
+              <dt className="mb-2 text-xs uppercase text-ink-soft">On hand</dt>
+              <dd>
+                <QuantityAmpoules
+                  quantity={item.quantity}
+                  parLevel={item.parLevel}
+                  unit={item.unit}
+                  controlled={item.controlled}
+                  size="lg"
+                />
               </dd>
             </div>
             <div className="rounded-lg bg-surface p-3">
@@ -629,7 +622,7 @@ export function ScanFlowView() {
                 {format(new Date(item.expiryDate), 'dd MMM yyyy')}
               </dd>
             </div>
-            <div className="rounded-lg bg-surface p-3">
+            <div className="rounded-lg bg-surface p-3 col-span-2">
               <dt className="text-xs uppercase text-ink-soft">Type</dt>
               <dd className="font-semibold">
                 {item.controlled ? `Controlled · Sch ${item.schedule}` : 'Standard'}
@@ -669,12 +662,13 @@ export function ScanFlowView() {
               />
             </label>
             <label className="text-sm">
-              <span className="mb-1 block font-semibold">Patient / PCR ref</span>
+              <span className="mb-1 block font-semibold">CAD / incident number (no patient name)</span>
               <input
                 value={patientRef}
                 onChange={(e) => setPatientRef(e.target.value)}
                 className="w-full rounded-lg border border-line bg-surface px-3 py-2"
-                placeholder="PCR-…"
+                placeholder="e.g. 4821 or CAD-4821"
+                autoComplete="off"
               />
             </label>
           </div>

@@ -18,6 +18,7 @@ import {
   RotateCcw,
   Syringe,
   Tent,
+  BarChart3,
   X,
 } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
@@ -40,6 +41,7 @@ export type View =
   | 'discrepancies'
   | 'map'
   | 'events'
+  | 'analytics'
 
 type NavItem = {
   id: View
@@ -59,9 +61,10 @@ const nav: NavItem[] = [
   { id: 'labels', label: 'QR Generator', icon: Printer, adminOnly: true },
   { id: 'bags', label: 'Drug Bags', icon: ClipboardList, adminOnly: true },
   { id: 'stock', label: 'Stock Control', icon: PackagePlus, adminOnly: true },
-  { id: 'check', label: 'Bag Check', icon: CheckSquare, adminOnly: true },
+  { id: 'check', label: 'Audit Bags', icon: CheckSquare, adminOnly: true },
   { id: 'cds', label: 'Controlled Drugs', icon: Lock, adminOnly: true },
   { id: 'activity', label: 'Activity Log', icon: Activity, adminOnly: true },
+  { id: 'analytics', label: 'Analytics', icon: BarChart3, adminOnly: true },
   { id: 'formulary', label: 'PHECC Formulary', icon: BookOpen, adminOnly: true },
 ]
 

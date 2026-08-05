@@ -28,6 +28,7 @@ export type ActivityType =
   | 'event_pack_created'
   | 'part_dose'
   | 'bag_renamed'
+  | 'bag_audit'
 
 export const CPG_VERSION = '2026 Edition'
 

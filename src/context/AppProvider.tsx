@@ -1,6 +1,6 @@
 import { useCallback, useMemo, useState, type ReactNode } from 'react'
 import { v4 as uuid } from 'uuid'
-import { createInitialBags, STAFF } from '../data/seed'
+import { createInitialBags, createSeedActivityHistory, STAFF } from '../data/seed'
 import { medsForGrade, controlledMedsForGrade } from '../data/formulary'
 import type {
   ActivityLog,
@@ -14,8 +14,8 @@ import type {
 import { CPG_VERSION } from '../types'
 import { AppContext, type AppContextValue } from './AppContext'
 
-const LIVE_KEY = 'doserx-v4-live'
-const SANDBOX_KEY = 'doserx-v4-sandbox'
+const LIVE_KEY = 'doserx-v5-live'
+const SANDBOX_KEY = 'doserx-v5-sandbox'
 
 function mergeStaff(rawStaff: AppState['staff'] | undefined) {
   if (!rawStaff?.length) return STAFF
@@ -28,10 +28,11 @@ function mergeStaff(rawStaff: AppState['staff'] | undefined) {
 }
 
 function freshState(sandbox: boolean): AppState {
+  const bags = createInitialBags()
   return {
-    bags: createInitialBags(),
+    bags,
     staff: STAFF,
-    activities: [],
+    activities: createSeedActivityHistory(bags, STAFF),
     shifts: [],
     discrepancies: [],
     pendingSync: [],
@@ -157,7 +158,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     }
     return {
       ...prev,
-      activities: [entry, ...prev.activities].slice(0, 500),
+      activities: [entry, ...prev.activities].slice(0, 2500),
       pendingSync: pending,
     }
   }, [])
@@ -339,10 +340,14 @@ export function AppProvider({ children }: { children: ReactNode }) {
         persistWith((prev) => {
           const bag = prev.bags.find((b) => b.id === bagId)
           if (!bag) return prev
+          const now = new Date().toISOString()
           let next = updateBag(prev, bagId, (b) => ({
             ...b,
             sealNumber: newSeal,
+            tagStatus: 'green',
             status: b.activeShiftId ? 'on_shift' : 'sealed',
+            lastCheckedAt: now,
+            lastCheckedBy: practitioner.name,
           }))
           return pushActivity(next, {
             type: 'seal_check',
@@ -352,9 +357,88 @@ export function AppProvider({ children }: { children: ReactNode }) {
             practitionerName: practitioner.name,
             witnessId: witness.id,
             witnessName: witness.name,
-            notes: `New seal: ${newSeal}`,
+            notes: `New seal: ${newSeal} · last checked updated`,
           })
         })
+      },
+
+      completeBagAudit: ({ bagId, auditor, witness, counts, notes, newSeal, tagStatus }) => {
+        if (auditor.role !== 'management') return false
+        if (auditor.id === witness.id) return false
+        let ok = false
+        persistWith((prev) => {
+          const bag = prev.bags.find((b) => b.id === bagId)
+          if (!bag) return prev
+          ok = true
+          let discrepancy = false
+          const mismatchNotes: string[] = []
+          bag.items.forEach((item) => {
+            const counted = counts[item.id] ?? item.quantity
+            if (counted !== item.quantity) {
+              discrepancy = true
+              mismatchNotes.push(`${item.name}: system ${item.quantity} vs count ${counted}`)
+            }
+          })
+          const now = new Date().toISOString()
+          const seal = newSeal?.trim()
+          let next = updateBag(prev, bagId, (b) => ({
+            ...b,
+            sealNumber: seal || b.sealNumber,
+            tagStatus: tagStatus ?? (discrepancy ? b.tagStatus : 'green'),
+            status: b.activeShiftId
+              ? 'on_shift'
+              : discrepancy
+                ? 'discrepancy'
+                : 'sealed',
+            lastCheckedAt: now,
+            lastCheckedBy: auditor.name,
+          }))
+          next = pushActivity(next, {
+            type: 'bag_audit',
+            bagId,
+            bagCode: bag.code,
+            practitionerId: auditor.id,
+            practitionerName: auditor.name,
+            witnessId: witness.id,
+            witnessName: witness.name,
+            notes: [
+              discrepancy ? `Mismatch · ${mismatchNotes.join('; ')}` : 'Audit OK — counts match system',
+              seal ? `Resealed: ${seal}` : null,
+              tagStatus ? `Tag: ${tagStatus}` : null,
+              notes,
+            ]
+              .filter(Boolean)
+              .join(' · '),
+            discrepancy,
+          })
+          if (discrepancy) {
+            // Open discrepancy case for workflow if none open for this bag
+            const hasOpen = next.discrepancies.some(
+              (d) => d.bagId === bagId && d.status !== 'resolved',
+            )
+            if (!hasOpen) {
+              const caseItem = {
+                id: uuid(),
+                bagId,
+                bagCode: bag.code,
+                reportedAt: now,
+                reportedById: auditor.id,
+                reportedByName: auditor.name,
+                witnessId: witness.id,
+                witnessName: witness.name,
+                summary: `Audit mismatch on ${bag.code}`,
+                details: mismatchNotes.join('\n'),
+                status: 'open' as const,
+              }
+              next = {
+                ...next,
+                discrepancies: [caseItem, ...next.discrepancies],
+              }
+            }
+          }
+          return next
+        })
+        return ok
       },
 
       restockItem: (bagId, itemId, qty, lot, expiry, manager) => {

@@ -52,6 +52,15 @@ export interface AppActions {
     notes: string,
   ) => void
   resignSeal: (bagId: string, newSeal: string, practitioner: StaffMember, witness: StaffMember) => void
+  completeBagAudit: (args: {
+    bagId: string
+    auditor: StaffMember
+    witness: StaffMember
+    counts: Record<string, number>
+    notes?: string
+    newSeal?: string
+    tagStatus?: TagStatus
+  }) => boolean
   restockItem: (
     bagId: string,
     itemId: string,

@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import { useApp } from '../context/AppContext'
 import { daysUntil } from '../lib/format'
 import { GradeBadge, StatusBadge } from './Badges'
+import { StockItemCard } from './QuantityAmpoules'
 
 export function BagDetail({ bagId, onBack }: { bagId: string; onBack: () => void }) {
   const {
@@ -53,7 +54,7 @@ export function BagDetail({ bagId, onBack }: { bagId: string; onBack: () => void
     }
     resignSeal(bag.id, seal, currentUser, witness)
     setSeal('')
-    setMsg('New seal recorded.')
+    setMsg(`New seal recorded · last checked updated to ${format(new Date(), 'dd MMM yyyy HH:mm')}.`)
   }
 
   const saveName = () => {
@@ -174,72 +175,60 @@ export function BagDetail({ bagId, onBack }: { bagId: string; onBack: () => void
         </div>
       </div>
 
-      <div className="overflow-hidden rounded-xl border border-line bg-panel">
-        <div className="border-b border-line bg-surface px-4 py-3">
-          <h3 className="font-display text-xl font-bold">
-            Inventory · {bag.items.length} medications
-            {bag.type === 'controlled' && ' (Controlled Drugs Register)'}
-          </h3>
-        </div>
-        <div className="overflow-x-auto">
-          <table className="w-full min-w-[720px] text-left text-sm">
-            <thead className="bg-sea/5 text-xs uppercase tracking-wide text-ink-soft">
-              <tr>
-                <th className="px-4 py-2 font-semibold">Medication</th>
-                <th className="px-4 py-2 font-semibold">Presentation</th>
-                <th className="px-4 py-2 font-semibold">Qty</th>
-                <th className="px-4 py-2 font-semibold">Lot</th>
-                <th className="px-4 py-2 font-semibold">Expiry</th>
-                <th className="px-4 py-2 font-semibold">Status</th>
-              </tr>
-            </thead>
-            <tbody>
-              {bag.items.map((item) => {
-                const expired = isExpired(item)
-                const soon = !expired && expiringSoon(item)
-                return (
-                  <tr key={item.id} className="border-t border-line/70">
-                    <td className="px-4 py-2.5 font-semibold">
-                      {item.name}
-                      {item.controlled && (
-                        <span className="ml-2 rounded bg-cd-soft px-1.5 py-0.5 text-[10px] font-bold text-cd">
-                          Sch {item.schedule}
-                        </span>
-                      )}
-                    </td>
-                    <td className="px-4 py-2.5 text-ink-soft">{item.presentation}</td>
-                    <td className="px-4 py-2.5">
-                      <span className={item.quantity < item.parLevel ? 'font-bold text-coral' : 'font-semibold'}>
-                        {item.quantity}
-                      </span>
-                      <span className="text-ink-soft/50">
-                        {' '}
-                        / par {item.parLevel} {item.unit}
-                      </span>
-                    </td>
-                    <td className="px-4 py-2.5 font-mono text-xs">{item.lotNumber}</td>
-                    <td className="px-4 py-2.5">{format(new Date(item.expiryDate), 'MMM yyyy')}</td>
-                    <td className="px-4 py-2.5">
-                      {expired ? (
-                        <span className="text-xs font-semibold text-coral">Expired</span>
-                      ) : soon ? (
-                        <span className="text-xs font-semibold text-ink">{daysUntil(item.expiryDate)}d left</span>
-                      ) : item.quantity === 0 ? (
-                        <span className="text-xs font-semibold text-coral">Empty</span>
-                      ) : (
-                        <span className="text-xs font-semibold text-ok">OK</span>
-                      )}
-                    </td>
-                  </tr>
-                )
-              })}
-            </tbody>
-          </table>
+      <div className="rounded-xl border border-line bg-panel p-4 sm:p-5">
+        <h3 className="mb-1 font-display text-xl font-bold">
+          Inventory · {bag.items.length} medications
+          {bag.type === 'controlled' && ' (Controlled Drugs Register)'}
+        </h3>
+        <p className="mb-4 text-xs text-ink-soft">
+          Filled ampoules show units on hand; empty slots show remaining capacity to par.
+        </p>
+        <div className="grid gap-2.5 sm:grid-cols-2">
+          {bag.items.map((item) => {
+            const expired = isExpired(item)
+            const soon = !expired && expiringSoon(item)
+            const status = expired ? (
+              <span className="rounded bg-coral-soft px-2 py-0.5 text-[10px] font-bold uppercase text-coral">
+                Expired
+              </span>
+            ) : soon ? (
+              <span className="rounded bg-amber-soft px-2 py-0.5 text-[10px] font-bold uppercase text-ink">
+                {daysUntil(item.expiryDate)}d left
+              </span>
+            ) : item.quantity === 0 ? (
+              <span className="rounded bg-coral-soft px-2 py-0.5 text-[10px] font-bold uppercase text-coral">
+                Empty
+              </span>
+            ) : (
+              <span className="rounded bg-ok-soft px-2 py-0.5 text-[10px] font-bold uppercase text-ok">
+                OK
+              </span>
+            )
+            return (
+              <StockItemCard
+                key={item.id}
+                name={item.name}
+                presentation={item.presentation}
+                quantity={item.quantity}
+                parLevel={item.parLevel}
+                unit={item.unit}
+                lotNumber={item.lotNumber}
+                expiryLabel={format(new Date(item.expiryDate), 'MMM yyyy')}
+                controlled={item.controlled}
+                schedule={item.schedule}
+                status={status}
+              />
+            )
+          })}
         </div>
       </div>
 
       <div className="rounded-xl border border-line bg-panel p-4">
-        <h3 className="mb-3 font-display text-xl font-bold">Apply / replace seal</h3>
+        <h3 className="mb-1 font-display text-xl font-bold">Apply / replace seal</h3>
+        <p className="mb-3 text-xs text-ink-soft">
+          Resealing marks the bag sealed and updates <strong>last checked</strong> to now (with your name).
+          For a full count audit, use <strong>Audit Bags</strong> in the menu.
+        </p>
         <div className="flex flex-wrap gap-3">
           <input
             value={seal}

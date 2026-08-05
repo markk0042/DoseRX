@@ -113,7 +113,7 @@ export function AdministerView({ preferredBagId }: { preferredBagId?: string }) 
       }
     } else {
       if (!patientRef.trim() || !dose || !route || !indication) {
-        setMsg('Patient ref, dose, route and indication are required.')
+        setMsg('CAD / incident number, dose, route and indication are required.')
         return
       }
       if (usePartDose) {
@@ -283,8 +283,14 @@ export function AdministerView({ preferredBagId }: { preferredBagId?: string }) 
           {mode === 'admin' && (
             <>
               <label className="block text-sm">
-                <span className="mb-1 block font-semibold">Patient / PCR ref</span>
-                <input value={patientRef} onChange={(e) => setPatientRef(e.target.value)} className="w-full rounded-lg border border-line bg-surface px-3 py-2" placeholder="PCR-…" />
+                <span className="mb-1 block font-semibold">CAD / incident number (no patient name)</span>
+                <input
+                  value={patientRef}
+                  onChange={(e) => setPatientRef(e.target.value)}
+                  className="w-full rounded-lg border border-line bg-surface px-3 py-2"
+                  placeholder="e.g. 4821 or CAD-4821"
+                  autoComplete="off"
+                />
               </label>
               <div className="grid gap-3 sm:grid-cols-3">
                 <label className="text-sm">
