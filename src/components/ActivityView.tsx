@@ -29,7 +29,10 @@ export function ActivityView() {
   const [filter, setFilter] = useState<'all' | ActivityType>('all')
 
   const rows = useMemo(() => {
-    return state.activities.filter((a) => (filter === 'all' ? true : a.type === filter))
+    return state.activities.filter((a) => {
+      if (a.type === 'event_pack_created') return false
+      return filter === 'all' ? true : a.type === filter
+    })
   }, [state.activities, filter])
 
   return (
@@ -48,7 +51,6 @@ export function ActivityView() {
             'waste',
             'discrepancy',
             'restock',
-            'event_pack_created',
             'seal_check',
           ] as ActivityType[]
         ).map((t) => (

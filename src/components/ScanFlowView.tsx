@@ -783,11 +783,8 @@ function TagPill({ status }: { status: TagStatus }) {
 
 function DemoQuickPick({ onPick }: { onPick: (text: string) => void }) {
   const { state } = useApp()
-  const [medBagId, setMedBagId] = useState(state.bags[0]?.id ?? '')
   const bags = state.bags
   const onShift = bags.filter((b) => b.activeShiftId)
-  const medBag = bags.find((b) => b.id === medBagId) ?? bags[0]
-  const meds = (medBag?.items ?? []).slice(0, 12)
 
   if (bags.length === 0) return null
 
@@ -797,8 +794,8 @@ function DemoQuickPick({ onPick }: { onPick: (text: string) => void }) {
         Demo quick pick (no camera)
       </p>
       <p className="mb-3 text-[11px] text-ink-soft/80">
-        Use these to test the flow if the camera cannot read an on-screen QR (common on laptops). Real printed labels
-        work the same way.
+        Use these to test bag sign-out / return if the camera cannot read an on-screen QR. Real printed labels work the
+        same way.
       </p>
 
       <p className="mb-1.5 text-[11px] font-semibold text-ink-soft/80">Scan a bag (shift menu)</p>
@@ -814,36 +811,6 @@ function DemoQuickPick({ onPick }: { onPick: (text: string) => void }) {
             <span className="ml-1 font-medium text-ink-soft/70">· {b.grade === 'AP' ? 'AP' : b.grade}</span>
           </button>
         ))}
-      </div>
-
-      <p className="mb-1.5 text-[11px] font-semibold text-ink-soft/80">Scan a medication (opens drug → Administer)</p>
-      <label className="mb-2 flex flex-wrap items-center gap-2 text-xs">
-        <span className="font-semibold text-ink-soft">From bag</span>
-        <select
-          value={medBag?.id ?? ''}
-          onChange={(e) => setMedBagId(e.target.value)}
-          className="rounded-lg border border-line bg-surface px-2 py-1.5 text-xs font-semibold"
-        >
-          {bags.map((b) => (
-            <option key={b.id} value={b.id}>
-              {b.code} — {b.name} ({b.items.length} meds)
-            </option>
-          ))}
-        </select>
-      </label>
-      <div className="mb-3 flex flex-wrap gap-2">
-        {meds.map((item) => (
-          <button
-            key={item.id}
-            type="button"
-            onClick={() => onPick(`DOSERX|MED|${medBag!.id}|${item.medicationId}`)}
-            className="rounded-lg border border-sea/30 bg-mint/40 px-3 py-1.5 text-xs font-semibold hover:border-sea"
-          >
-            {item.name.length > 28 ? `${item.name.slice(0, 26)}…` : item.name}
-            <span className="ml-1 font-medium text-ink-soft/70">· qty {item.quantity}</span>
-          </button>
-        ))}
-        {meds.length === 0 && <p className="text-xs text-ink-soft">No medications in this bag.</p>}
       </div>
 
       {onShift.length > 0 && (
