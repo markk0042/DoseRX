@@ -274,6 +274,13 @@ export function ScanFlowView() {
         </div>
       )}
 
+      {(phase === 'med-detail' || phase === 'med-admin') && (!bag || !item) && (
+        <div className="rounded-xl border border-coral/30 bg-coral-soft/40 p-4 text-sm">
+          <p className="font-semibold text-coral">Could not open that medication.</p>
+          <p className="mt-1 text-ink-soft">Tap New scan and try again, or use Demo quick pick.</p>
+        </div>
+      )}
+
       {phase === 'bag-menu' && bag && (
         <div className="space-y-3 rounded-xl border border-line bg-panel p-5">
           <div className="flex items-start gap-3">
