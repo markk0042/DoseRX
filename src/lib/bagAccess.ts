@@ -1,26 +1,23 @@
-import type { ClinicalGrade, DrugBag, ShiftAssignment, StaffMember } from '../types'
+import type { DrugBag, ShiftAssignment, StaffMember } from '../types'
 
-const gradeRank: Record<ClinicalGrade, number> = {
-  EMT: 1,
-  Paramedic: 2,
-  AP: 3,
-}
-
-/** Whether this clinician may sign out / work from this bag on shift */
+/**
+ * Staff may only work bags for their own clinical grade:
+ * - EMT → EMT standard bags only (no CDs)
+ * - Paramedic → Paramedic standard + Paramedic CD pouch
+ * - AP → AP standard + AP CD pouch
+ * Management can access all bags.
+ */
 export function canStaffHoldBag(user: StaffMember, bag: DrugBag): boolean {
   if (user.role === 'management') return true
 
+  // Controlled pouches: grade must match exactly; EMT never
   if (bag.type === 'controlled') {
     if (user.grade === 'EMT') return false
-    // Paramedic CD pouch — Paramedic or AP
-    if (bag.grade === 'Paramedic') return user.grade === 'Paramedic' || user.grade === 'AP'
-    // AP CD pouch — AP only
-    if (bag.grade === 'AP') return user.grade === 'AP'
-    return false
+    return bag.grade === user.grade
   }
 
-  // Standard / event bags: own grade, or higher grade covering down
-  return gradeRank[user.grade] >= gradeRank[bag.grade]
+  // Standard / event bags: exact grade match
+  return bag.grade === user.grade
 }
 
 export function activeShiftForBag(
@@ -31,7 +28,13 @@ export function activeShiftForBag(
   return shifts.find((s) => s.id === bag.activeShiftId && s.active)
 }
 
-/** Bags currently signed out to this user (any grade) */
+/** Bags this staff member is allowed to see / sign out (by grade + CD scope) */
+export function bagsInStaffScope(bags: DrugBag[], user: StaffMember): DrugBag[] {
+  if (user.role === 'management') return bags
+  return bags.filter((b) => canStaffHoldBag(user, b))
+}
+
+/** Bags currently signed out to this user */
 export function bagsHeldOnShift(
   bags: DrugBag[],
   shifts: ShiftAssignment[],
@@ -55,4 +58,11 @@ export function bagsUsableForAdminister(
     if (b.eventEndsAt && new Date(b.eventEndsAt).getTime() < Date.now()) return false
     return canStaffHoldBag(user, b)
   })
+}
+
+export function gradeBagScopeLabel(user: StaffMember): string {
+  if (user.role === 'management') return 'all bags'
+  const g = user.grade === 'AP' ? 'AP' : user.grade
+  if (user.grade === 'EMT') return 'EMT bags only'
+  return `${g} bags + ${g} controlled drug pouch`
 }

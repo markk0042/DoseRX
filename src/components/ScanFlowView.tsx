@@ -4,7 +4,12 @@ import { useCallback, useMemo, useState } from 'react'
 import { filterOptionsForGrade } from '../data/cpg'
 import { useApp } from '../context/AppContext'
 import { captureLocation } from '../lib/geo'
-import { canStaffHoldBag } from '../lib/bagAccess'
+import {
+  bagsHeldOnShift,
+  bagsInStaffScope,
+  canStaffHoldBag,
+  gradeBagScopeLabel,
+} from '../lib/bagAccess'
 import { parseQrPayload, resolveStockItem } from '../lib/qr'
 import type { PhotoEvidence, StaffMember, TagStatus } from '../types'
 import { PhotoCapture } from './PhotoCapture'
@@ -24,6 +29,7 @@ type Phase =
 
 export function ScanFlowView() {
   const {
+    state,
     currentUser,
     getBag,
     getActiveShift,
@@ -105,12 +111,36 @@ export function ScanFlowView() {
         setScanError(`Bag not found for this QR (id: ${payload.bagId}). Labels must match this device’s bag data.`)
         return
       }
+
+      const holding =
+        currentUser &&
+        bagsHeldOnShift([foundBag], state.shifts, currentUser).length > 0
+
+      // Staff may only open bags in their grade scope (unless returning one they already hold)
+      if (
+        currentUser &&
+        currentUser.role === 'staff' &&
+        !canStaffHoldBag(currentUser, foundBag) &&
+        !holding
+      ) {
+        const g = currentUser.grade === 'AP' ? 'AP' : currentUser.grade
+        setScanError(
+          `${foundBag.code} is outside your scope (${gradeBagScopeLabel(currentUser)}). As ${g} you cannot sign out or use this bag.`,
+        )
+        return
+      }
+
       setScanError('')
       setBagId(payload.bagId)
 
       if (payload.kind === 'bag') {
         setItemId(null)
         setPhase('bag-menu')
+        return
+      }
+
+      if (currentUser?.role === 'staff' && !canStaffHoldBag(currentUser, foundBag) && !holding) {
+        setScanError(`Medication is in ${foundBag.code}, which is outside your clinical grade scope.`)
         return
       }
 
@@ -128,7 +158,7 @@ export function ScanFlowView() {
       setIndication(opts.indications[0] ?? '')
       setPhase('med-detail')
     },
-    [getBag, currentUser?.grade],
+    [getBag, currentUser, state.shifts],
   )
 
   const completeSignOut = async (witness: StaffMember) => {
@@ -265,6 +295,12 @@ export function ScanFlowView() {
         <p className="text-sm text-ink-soft/80">
           Scan a <strong>bag QR</strong> for shift sign-out / return, or a <strong>medication QR</strong> to view batch /
           expiry and administer.
+          {currentUser?.role === 'staff' && (
+            <>
+              {' '}
+              Your scope: <strong>{gradeBagScopeLabel(currentUser)}</strong>.
+            </>
+          )}
         </p>
       </div>
 
@@ -820,11 +856,13 @@ function TagPill({ status }: { status: TagStatus }) {
 }
 
 function DemoQuickPick({ onPick }: { onPick: (text: string) => void }) {
-  const { state } = useApp()
-  const bags = state.bags
-  const onShift = bags.filter((b) => b.activeShiftId)
+  const { state, currentUser } = useApp()
+  const scopedBags = currentUser ? bagsInStaffScope(state.bags, currentUser) : state.bags
+  const heldOnShift = currentUser
+    ? bagsHeldOnShift(state.bags, state.shifts, currentUser)
+    : state.bags.filter((b) => b.activeShiftId)
 
-  if (bags.length === 0) return null
+  if (scopedBags.length === 0 && heldOnShift.length === 0) return null
 
   return (
     <div className="mt-4 border-t border-line pt-3">
@@ -832,13 +870,14 @@ function DemoQuickPick({ onPick }: { onPick: (text: string) => void }) {
         Demo quick pick (no camera)
       </p>
       <p className="mb-3 text-[11px] text-ink-soft/80">
-        Use these to test bag sign-out / return if the camera cannot read an on-screen QR. Real printed labels work the
-        same way.
+        {currentUser && currentUser.role === 'staff'
+          ? `Showing ${gradeBagScopeLabel(currentUser)} — bags outside your grade are hidden.`
+          : 'Use these to test bag sign-out / return without the camera.'}
       </p>
 
-      <p className="mb-1.5 text-[11px] font-semibold text-ink-soft/80">Scan a bag (shift menu)</p>
+      <p className="mb-1.5 text-[11px] font-semibold text-ink-soft/80">Your grade bags (sign-out)</p>
       <div className="mb-3 flex flex-wrap gap-2">
-        {bags.map((b) => (
+        {scopedBags.map((b) => (
           <button
             key={b.id}
             type="button"
@@ -846,16 +885,21 @@ function DemoQuickPick({ onPick }: { onPick: (text: string) => void }) {
             className="rounded-lg border border-line bg-surface px-3 py-1.5 text-xs font-semibold hover:border-sea-mid"
           >
             {b.code}
-            <span className="ml-1 font-medium text-ink-soft/70">· {b.grade === 'AP' ? 'AP' : b.grade}</span>
+            <span className="ml-1 font-medium text-ink-soft/70">
+              · {b.type === 'controlled' ? 'CD' : b.grade === 'AP' ? 'AP' : b.grade}
+            </span>
           </button>
         ))}
+        {scopedBags.length === 0 && (
+          <p className="text-xs text-ink-soft">No bags in your clinical scope.</p>
+        )}
       </div>
 
-      {onShift.length > 0 && (
+      {heldOnShift.length > 0 && (
         <>
-          <p className="mb-1.5 text-[11px] font-semibold text-ink-soft/80">Bags on shift (quick return)</p>
+          <p className="mb-1.5 text-[11px] font-semibold text-ink-soft/80">Your bags on shift (return)</p>
           <div className="flex flex-wrap gap-2">
-            {onShift.map((b) => (
+            {heldOnShift.map((b) => (
               <button
                 key={`return-${b.id}`}
                 type="button"
