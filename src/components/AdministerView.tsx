@@ -376,11 +376,27 @@ export function AdministerView({ preferredBagId }: { preferredBagId?: string }) 
                 </label>
                 <label className="text-sm">
                   <span className="mb-1 block font-semibold">Route (CPG)</span>
-                  <select value={route} onChange={(e) => setRoute(e.target.value)} className="w-full rounded-lg border border-line bg-surface px-3 py-2">
-                    {options.routes.map((r) => (
-                      <option key={r} value={r}>{r}</option>
-                    ))}
+                  <select
+                    value={route}
+                    onChange={(e) => setRoute(e.target.value)}
+                    className="w-full rounded-lg border border-line bg-surface px-3 py-2"
+                    disabled={options.routes.length === 0}
+                  >
+                    {options.routes.length === 0 ? (
+                      <option value="">No route in scope for your grade</option>
+                    ) : (
+                      options.routes.map((r) => (
+                        <option key={r} value={r}>
+                          {r}
+                        </option>
+                      ))
+                    )}
                   </select>
+                  <span className="mt-1 block text-[11px] text-ink-soft">
+                    {currentUser?.grade === 'AP'
+                      ? 'All CPG routes for this medication (incl. IV / IO)'
+                      : 'EMT / Paramedic scope: PO, SL, IM (and inhaled/neb where listed). IV / IO are AP only.'}
+                  </span>
                 </label>
                 <label className="text-sm">
                   <span className="mb-1 block font-semibold">Indication</span>

@@ -802,12 +802,17 @@ export function ScanFlowView() {
                 value={route}
                 onChange={(e) => setRoute(e.target.value)}
                 className="w-full rounded-lg border border-line bg-surface px-3 py-2"
+                disabled={options.routes.length === 0}
               >
-                {options.routes.map((r) => (
-                  <option key={r} value={r}>
-                    {r}
-                  </option>
-                ))}
+                {options.routes.length === 0 ? (
+                  <option value="">No route in scope for your grade</option>
+                ) : (
+                  options.routes.map((r) => (
+                    <option key={r} value={r}>
+                      {r}
+                    </option>
+                  ))
+                )}
               </select>
             </label>
             <label className="text-sm">
