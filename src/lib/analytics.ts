@@ -1,8 +1,6 @@
 import {
-  differenceInCalendarDays,
   eachDayOfInterval,
   eachMonthOfInterval,
-  eachWeekOfInterval,
   endOfDay,
   format,
   startOfDay,
@@ -242,14 +240,12 @@ export function buildAnalyticsReport(state: AppState, period: AnalyticsPeriod): 
     .map(([key, count]) => ({ key, label: TYPE_LABELS[key] ?? key, count }))
     .sort((a, b) => b.count - a.count)
 
-  const daySpan = differenceInCalendarDays(end, start)
-  const useMonths = daySpan > 100
-  const useWeeks = !useMonths && daySpan > 45
+  // 7d / 14d / 30d → one bar group per day (full daily data)
+  // 90d / 6m / 12m → one bar group per month (full month totals)
+  const useMonths = period === '90d' || period === '6m' || period === '12m'
   const buckets = useMonths
     ? eachMonthOfInterval({ start: startOfMonth(start), end })
-    : useWeeks
-      ? eachWeekOfInterval({ start, end }, { weekStartsOn: 1 })
-      : eachDayOfInterval({ start, end })
+    : eachDayOfInterval({ start, end })
 
   const auditTypes = ['bag_audit', 'inventory_check', 'seal_check']
   const shiftTypes = ['shift_sign_out', 'shift_return']
@@ -283,9 +279,9 @@ export function buildAnalyticsReport(state: AppState, period: AnalyticsPeriod): 
       date: format(bucketStart, 'yyyy-MM-dd'),
       label: useMonths
         ? format(bucketStart, yearCross ? 'MMM yy' : 'MMM')
-        : useWeeks
-          ? format(bucketStart, 'd MMM')
-          : format(bucketStart, daySpan > 14 ? 'd MMM' : 'EEE d'),
+        : period === '7d' || period === '14d'
+          ? format(bucketStart, 'EEE d')
+          : format(bucketStart, 'd'),
       audits,
       administered,
       wasted,

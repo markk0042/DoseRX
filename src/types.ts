@@ -46,19 +46,70 @@ export interface PhotoEvidence {
   capturedAt: string
 }
 
-export interface MedicationDef {
+/** Clinical / administration unit (what you enter when giving a dose) */
+export type DoseUnit =
+  | 'ml'
+  | 'mg'
+  | 'mcg'
+  | 'g'
+  | 'amp'
+  | 'tab'
+  | 'spray'
+  | 'puff'
+  | 'neb'
+  | 'IU'
+  | 'unit'
+  | 'tube'
+  | 'kit'
+  | 'inhaler'
+  | 'drop'
+
+/** Inventory counting unit (what sits on the shelf / in the bag) */
+export type StockUnit =
+  | 'bottle'
+  | 'amp'
+  | 'tab'
+  | 'ml'
+  | 'vial'
+  | 'neb'
+  | 'tube'
+  | 'kit'
+  | 'spray'
+  | 'inhaler'
+  | 'cylinder'
+  | 'bag'
+  | 'prefill'
+  | 'pack'
+  | 'unit'
+  | 'drop'
+
+/**
+ * Per-drug medication profile (formulary).
+ * packSize = amount of doseUnit contained in one stockUnit
+ * e.g. bottle of 100 ml oral solution → stockUnit bottle, doseUnit ml, packSize 100
+ */
+export interface MedicationProfile {
+  /** e.g. 120mg/5ml, 500mg/tab, 1mg/1ml */
+  strength: string
+  doseUnit: DoseUnit
+  stockUnit: StockUnit
+  packSize: number
+}
+
+export interface MedicationDef extends MedicationProfile {
   id: string
   name: string
   presentation: string
   grades: ClinicalGrade[]
   controlled: boolean
   schedule?: '2' | '3' | '4'
+  /** @deprecated prefer stockUnit — kept as inventory display alias */
   unit: string
   defaultQty: number
   category: string
 }
 
-export interface StockItem {
+export interface StockItem extends MedicationProfile {
   id: string
   medicationId: string
   name: string
@@ -69,6 +120,7 @@ export interface StockItem {
   expiryDate: string
   controlled: boolean
   schedule?: '2' | '3' | '4'
+  /** Inventory display alias of stockUnit */
   unit: string
 }
 

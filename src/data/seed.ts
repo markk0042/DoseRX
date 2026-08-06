@@ -33,7 +33,11 @@ function buildItems(bagId: string, grade: ClinicalGrade, controlledOnly: boolean
     expiryDate: expiry(6 + (i % 18)),
     controlled: m.controlled,
     schedule: m.schedule,
-    unit: m.unit,
+    unit: m.stockUnit,
+    strength: m.strength,
+    doseUnit: m.doseUnit,
+    stockUnit: m.stockUnit,
+    packSize: m.packSize,
   }))
 }
 

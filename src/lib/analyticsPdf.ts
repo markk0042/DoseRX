@@ -135,7 +135,7 @@ function drawHBars(
   return cy
 }
 
-function drawStackedTrend(
+function drawSideBySideTrend(
   doc: jsPDF,
   report: AnalyticsReport,
   x: number,
@@ -146,97 +146,110 @@ function drawStackedTrend(
   const rows = report.dailyTrend
   if (!rows.length) return y + height
 
-  const totals = rows.map(
-    (r) => r.audits + r.administered + r.wasted + r.shifts + r.discrepancies + r.other,
-  )
-  const rawMax = Math.max(...totals, 1)
-  const yMax = rawMax <= 4 ? 4 : rawMax <= 10 ? Math.ceil(rawMax / 2) * 2 : Math.ceil(rawMax / 5) * 5
-  const padL = 10
-  const padB = 22
+  const series = [
+    { key: 'audits' as const, color: OK, label: 'Audits/seals' },
+    { key: 'administered' as const, color: ADMIN_BLUE, label: 'Administered' },
+    { key: 'wasted' as const, color: WASTE_TEAL, label: 'Wasted' },
+    { key: 'shifts' as const, color: AMBER, label: 'Shifts' },
+    { key: 'discrepancies' as const, color: CORAL, label: 'Discrepancy' },
+  ]
+
+  // Match screen: scale 0-100; if any series exceeds 100, extend in steps of 50
+  const seriesMax = Math.max(...rows.flatMap((r) => series.map((s) => r[s.key])), 1)
+  const yMax = seriesMax <= 100 ? 100 : Math.ceil(seriesMax / 50) * 50
+  const tickStep = yMax <= 100 ? 20 : 50
+  const tickVals: number[] = []
+  for (let v = 0; v <= yMax; v += tickStep) tickVals.push(v)
+
+  const isMonthly = report.period === '90d' || report.period === '6m' || report.period === '12m'
+  const padL = 12
+  const padB = 20
   const padT = 4
   const plotW = width - padL
   const plotH = height - padB - padT
   const groupW = plotW / rows.length
+  const innerGap = isMonthly ? Math.min(3.2, groupW * 0.2) : Math.min(1.2, groupW * 0.08)
+  const clusterW = Math.max(4, groupW - innerGap)
+  const barGap = 0.35
+  const barW = Math.max(0.7, (clusterW - barGap * (series.length - 1)) / series.length)
 
   doc.setFillColor(...SURFACE)
   doc.roundedRect(x, y, width, height, 2, 2, 'F')
 
-  const ticks = 4
-  for (let i = 0; i <= ticks; i++) {
-    const val = Math.round((yMax / ticks) * i)
+  // Alternating column bands (all ranges)
+  rows.forEach((_, i) => {
+    const gx = x + padL + i * groupW
+    doc.setFillColor(i % 2 === 0 ? 232 : 226, i % 2 === 0 ? 240 : 243, i % 2 === 0 ? 242 : 245)
+    doc.rect(gx, y + padT, groupW, plotH, 'F')
+    if (i > 0) {
+      doc.setDrawColor(...SEA)
+      doc.setLineWidth(0.15)
+      doc.line(gx, y + padT, gx, y + padT + plotH)
+    }
+  })
+
+  tickVals.forEach((val) => {
     const gy = y + padT + plotH - (val / yMax) * plotH
     doc.setDrawColor(...LINE)
-    doc.setLineWidth(0.2)
+    doc.setLineWidth(val === 0 ? 0.35 : 0.2)
     doc.line(x + padL, gy, x + width - 2, gy)
     doc.setFontSize(6.5)
     doc.setTextColor(...SEA_MID)
     doc.text(String(val), x + padL - 1.5, gy + 1.5, { align: 'right' })
-  }
-
-  const series = [
-    { key: 'audits' as const, color: OK },
-    { key: 'administered' as const, color: ADMIN_BLUE },
-    { key: 'wasted' as const, color: WASTE_TEAL },
-    { key: 'shifts' as const, color: AMBER },
-    { key: 'discrepancies' as const, color: CORAL },
-    { key: 'other' as const, color: SEA_MID },
-  ]
-
-  // Cap label count so dates never collide
-  const maxLabels = Math.min(8, rows.length)
-  const labelEvery = Math.max(1, Math.ceil(rows.length / maxLabels))
+  })
 
   rows.forEach((r, i) => {
-    const gx = x + padL + i * groupW + 0.6
-    const barW = Math.max(1.8, groupW - 1.2)
-    let stacked = 0
-    series.forEach((s) => {
+    const groupX = x + padL + i * groupW
+    const clusterX = groupX + (groupW - clusterW) / 2
+    series.forEach((s, si) => {
       const v = r[s.key]
       if (!v) return
-      const bh = Math.max(0.8, (v / yMax) * plotH)
-      const bottom = y + padT + plotH - (stacked / yMax) * plotH
+      const bx = clusterX + si * (barW + barGap)
+      const bh = Math.max(0.8, (Math.min(v, yMax) / yMax) * plotH)
+      const top = y + padT + plotH - bh
       doc.setFillColor(...s.color)
-      doc.rect(gx, bottom - bh, barW, bh, 'F')
-      stacked += v
+      doc.roundedRect(bx, top, barW, bh, 0.3, 0.3, 'F')
     })
   })
 
-  // X labels: spaced, short form, baseline below plot
-  doc.setFontSize(6)
+  // X labels: every period for months / 7d; every 2nd for denser daily
+  const labelEvery =
+    isMonthly || report.period === '7d' ? 1 : report.period === '14d' ? 1 : Math.max(1, Math.ceil(rows.length / 16))
+  doc.setFontSize(isMonthly ? 7 : 5.5)
   doc.setTextColor(...INK)
   rows.forEach((r, i) => {
-    if (!(i % labelEvery === 0 || i === rows.length - 1 || i === 0)) return
+    if (!(i % labelEvery === 0 || i === rows.length - 1)) return
     const gx = x + padL + i * groupW + groupW / 2
-    // Prefer day number for daily, keep month labels short
-    let label = r.label
-    if (/^\d{1,2}\s+[A-Za-z]+$/.test(r.label)) {
-      const [d, m] = r.label.split(/\s+/)
-      label = i === 0 || i === rows.length - 1 || i % (labelEvery * 2) === 0 ? `${d} ${m.slice(0, 3)}` : d
-    } else if (/^[A-Za-z]+\s+\d{1,2}$/.test(r.label)) {
+    if (/^[A-Za-z]+\s+\d{1,2}$/.test(r.label)) {
       const [a, b] = r.label.split(/\s+/)
-      label = `${a.slice(0, 3)} ${b}`
+      doc.text(a.slice(0, 3), gx, y + height - 10, { align: 'center' })
+      doc.setTextColor(...SEA_MID)
+      doc.text(b, gx, y + height - 6, { align: 'center' })
+      doc.setTextColor(...INK)
+      return
     }
+    const label = r.label.length > 6 && !isMonthly ? r.label.slice(0, 6) : r.label
     doc.text(label, gx, y + height - 8, { align: 'center' })
   })
 
   const legendY = y + height + 4
-  const legend = [
-    { c: OK, t: 'Audits/seals' },
-    { c: ADMIN_BLUE, t: 'Administered' },
-    { c: WASTE_TEAL, t: 'Wasted' },
-    { c: AMBER, t: 'Shifts' },
-    { c: CORAL, t: 'Discrepancy' },
-    { c: SEA_MID, t: 'Other' },
-  ]
   let lx = x
-  legend.forEach((l) => {
-    doc.setFillColor(...l.c)
+  series.forEach((l) => {
+    doc.setFillColor(...l.color)
     doc.roundedRect(lx, legendY - 2.2, 3, 3, 0.5, 0.5, 'F')
     doc.setFontSize(6.5)
     doc.setTextColor(...INK)
-    doc.text(l.t, lx + 4.5, legendY)
-    lx += doc.getTextWidth(l.t) + 7
+    doc.text(l.label, lx + 4.5, legendY)
+    lx += doc.getTextWidth(l.label) + 7
   })
+  doc.setFontSize(6)
+  doc.setTextColor(...SEA_MID)
+  doc.text(
+    yMax > 100 ? `Y-axis 0-${yMax} (50-step; exceeds on-screen 100)` : 'Y-axis 0-100 | side-by-side (not stacked)',
+    x + width,
+    legendY,
+    { align: 'right' },
+  )
 
   return legendY + 6
 }
@@ -380,8 +393,8 @@ export async function downloadAnalyticsPdf(report: AnalyticsReport, sandboxMode:
   doc.setFont('helvetica', 'normal')
   doc.setFontSize(8)
   doc.setTextColor(...SEA_MID)
-  doc.text('Stacked events by day / week / month | Y-axis = event count', 14, y - 2)
-  y = drawStackedTrend(doc, report, 14, y + 2, w - 28, 82)
+  doc.text('Side-by-side bars by day / month | Y-axis 0-100 (extends by 50 if higher)', 14, y - 2)
+  y = drawSideBySideTrend(doc, report, 14, y + 2, w - 28, 82)
 
   y = sectionTitle(doc, 'Full metric ledger', y + 4)
   autoTable(doc, {

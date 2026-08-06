@@ -8,6 +8,7 @@ import type {
   StaffMember,
   StockItem,
 } from '../types'
+import { enrichStockProfile } from '../data/formulary'
 import { isSupabaseConfigured, isSupabaseSyncEnabled, supabase } from './supabase'
 
 type DbStaff = {
@@ -70,6 +71,10 @@ function stockToRow(item: StockItem, bagId: string) {
     controlled: item.controlled,
     schedule: item.schedule ?? null,
     unit: item.unit,
+    strength: item.strength,
+    dose_unit: item.doseUnit,
+    stock_unit: item.stockUnit,
+    pack_size: item.packSize,
   }
 }
 
@@ -307,7 +312,7 @@ export async function pullLiveStateFromCloud(): Promise<Partial<AppState> | null
 
   const stockByBag = new Map<string, StockItem[]>()
   for (const row of stockRes.data ?? []) {
-    const item: StockItem = {
+    const item = enrichStockProfile({
       id: String(row.id),
       medicationId: String(row.medication_id),
       name: String(row.name),
@@ -319,7 +324,11 @@ export async function pullLiveStateFromCloud(): Promise<Partial<AppState> | null
       controlled: Boolean(row.controlled),
       schedule: (row.schedule as StockItem['schedule']) || undefined,
       unit: String(row.unit ?? 'unit'),
-    }
+      strength: row.strength != null ? String(row.strength) : undefined,
+      doseUnit: row.dose_unit != null ? (String(row.dose_unit) as StockItem['doseUnit']) : undefined,
+      stockUnit: row.stock_unit != null ? (String(row.stock_unit) as StockItem['stockUnit']) : undefined,
+      packSize: row.pack_size != null ? Number(row.pack_size) : undefined,
+    })
     const list = stockByBag.get(String(row.bag_id)) ?? []
     list.push(item)
     stockByBag.set(String(row.bag_id), list)

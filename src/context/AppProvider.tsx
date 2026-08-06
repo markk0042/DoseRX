@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { v4 as uuid } from 'uuid'
 import { createInitialBags, createSeedActivityHistory, STAFF } from '../data/seed'
-import { medsForGrade, controlledMedsForGrade } from '../data/formulary'
+import { medsForGrade, controlledMedsForGrade, enrichStockProfile } from '../data/formulary'
 import type {
   ActivityLog,
   AppState,
@@ -58,6 +58,7 @@ function normalizeState(raw: Partial<AppState> | null, sandbox: boolean): AppSta
       tagStatus: b.tagStatus ?? 'green',
       activeShiftId: b.activeShiftId ?? null,
       type: b.type ?? 'standard',
+      items: (b.items ?? []).map((item) => enrichStockProfile(item)),
     })),
     staff: mergeStaff(raw.staff),
     activities: raw.activities ?? [],
@@ -132,7 +133,11 @@ function stockFromDef(
     expiryDate: d.toISOString().slice(0, 10),
     controlled: m.controlled,
     schedule: m.schedule,
-    unit: m.unit,
+    unit: m.stockUnit,
+    strength: m.strength,
+    doseUnit: m.doseUnit,
+    stockUnit: m.stockUnit,
+    packSize: m.packSize,
   }
 }
 

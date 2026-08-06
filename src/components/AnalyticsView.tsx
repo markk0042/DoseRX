@@ -120,70 +120,69 @@ export function AnalyticsView() {
         <MiniStat label="Stock updates" value={String(report.totals.stockUpdates)} tone="good" />
       </div>
 
+      <ChartCard
+        title="Activity over time"
+        subtitle="Side-by-side bars · Y-axis 0–100 · every day labelled (7d–month) · months (3–12m)"
+      >
+        <TrendChart rows={report.dailyTrend} period={report.period} />
+      </ChartCard>
+
       <div className="grid gap-4 lg:grid-cols-2">
-        <ChartCard
-          title="Activity over time"
-          subtitle="Y-axis = event count · X-axis = full selected range (all periods visible) · stacked by type"
-        >
-          <TrendChart rows={report.dailyTrend} />
-        </ChartCard>
         <ChartCard title="Activity mix" subtitle="All events in the selected period">
           <HorizontalBars rows={report.byActivityType.slice(0, 8)} color="sea" />
         </ChartCard>
-      </div>
-
-      <div className="grid gap-4 lg:grid-cols-2">
         <ChartCard
           title="Shift sign-out by grade"
           subtitle="Who signed bags out during the period (EMT / Paramedic / AP)"
         >
           <HorizontalBars rows={report.byGradeShift} color="ok" />
         </ChartCard>
+      </div>
+
+      <div className="grid gap-4 lg:grid-cols-2">
         <ChartCard
           title="Administered by grade"
           subtitle="Administrations and part-dose given, by practitioner grade"
         >
           <HorizontalBars rows={report.byGradeAdministered} color="sea" />
         </ChartCard>
-      </div>
-
-      <div className="grid gap-4 lg:grid-cols-2">
         <ChartCard title="Wasted by grade" subtitle="Waste events by practitioner grade">
           <HorizontalBars rows={report.byGradeWaste} color="cd" />
         </ChartCard>
-        <div className="rounded-xl border border-line bg-panel p-4">
-          <h3 className="font-display text-xl font-bold">Recent shift sign-out / return</h3>
-          <p className="mb-3 text-xs text-ink-soft">Grade of the holder at bag sign-out</p>
-          {report.recentShifts.length === 0 ? (
-            <EmptyHint text="No bag shifts in this period." />
-          ) : (
-            <ul className="divide-y divide-line/70">
-              {report.recentShifts.map((s, i) => (
-                <li key={`${s.bagCode}-${s.signedOutAt}-${i}`} className="flex flex-wrap items-center justify-between gap-2 py-2.5 text-sm">
-                  <div>
-                    <p className="font-semibold">
-                      {s.bagCode}{' '}
-                      <span className="text-xs font-bold text-sea-mid">
-                        {s.grade === 'AP' ? 'AP' : s.grade}
-                      </span>
-                    </p>
-                    <p className="text-xs text-ink-soft">{s.holder}</p>
-                  </div>
-                  <div className="text-right text-xs text-ink-soft">
-                    <p>Out {format(new Date(s.signedOutAt), 'dd MMM HH:mm')}</p>
-                    <p>
-                      {s.active
-                        ? 'On shift'
-                        : s.returnedAt
-                          ? `In ${format(new Date(s.returnedAt), 'dd MMM HH:mm')}`
-                          : 'Returned'}
-                    </p>
-                  </div>
-                </li>
-              ))}
-            </ul>
-          )}
-        </div>
+      </div>
+
+      <div className="rounded-xl border border-line bg-panel p-4">
+        <h3 className="font-display text-xl font-bold">Recent shift sign-out / return</h3>
+        <p className="mb-3 text-xs text-ink-soft">Grade of the holder at bag sign-out</p>
+        {report.recentShifts.length === 0 ? (
+          <EmptyHint text="No bag shifts in this period." />
+        ) : (
+          <ul className="divide-y divide-line/70">
+            {report.recentShifts.map((s, i) => (
+              <li key={`${s.bagCode}-${s.signedOutAt}-${i}`} className="flex flex-wrap items-center justify-between gap-2 py-2.5 text-sm">
+                <div>
+                  <p className="font-semibold">
+                    {s.bagCode}{' '}
+                    <span className="text-xs font-bold text-sea-mid">
+                      {s.grade === 'AP' ? 'AP' : s.grade}
+                    </span>
+                  </p>
+                  <p className="text-xs text-ink-soft">{s.holder}</p>
+                </div>
+                <div className="text-right text-xs text-ink-soft">
+                  <p>Out {format(new Date(s.signedOutAt), 'dd MMM HH:mm')}</p>
+                  <p>
+                    {s.active
+                      ? 'On shift'
+                      : s.returnedAt
+                        ? `In ${format(new Date(s.returnedAt), 'dd MMM HH:mm')}`
+                        : 'Returned'}
+                  </p>
+                </div>
+              </li>
+            ))}
+          </ul>
+        )}
       </div>
 
       <div className="grid gap-4 lg:grid-cols-2">
@@ -252,13 +251,15 @@ function ChartCard({
   title,
   subtitle,
   children,
+  className = '',
 }: {
   title: string
   subtitle: string
   children: ReactNode
+  className?: string
 }) {
   return (
-    <div className="rounded-xl border border-line bg-panel p-4">
+    <div className={`rounded-xl border border-line bg-panel p-4 ${className}`}>
       <h3 className="font-display text-xl font-bold">{title}</h3>
       <p className="mb-4 text-xs text-ink-soft">{subtitle}</p>
       {children}
@@ -309,8 +310,10 @@ function HorizontalBars({
 
 function TrendChart({
   rows,
+  period,
 }: {
   rows: {
+    date?: string
     label: string
     audits: number
     administered: number
@@ -319,14 +322,20 @@ function TrendChart({
     discrepancies: number
     other: number
   }[]
+  period: AnalyticsPeriod
 }) {
   const hostRef = useRef<HTMLDivElement>(null)
-  const [hostW, setHostW] = useState(420)
+  const [hostW, setHostW] = useState(640)
+  const [tip, setTip] = useState<{
+    idx: number
+    x: number
+    y: number
+  } | null>(null)
 
   useEffect(() => {
     const el = hostRef.current
     if (!el) return
-    const measure = () => setHostW(Math.max(280, el.clientWidth))
+    const measure = () => setHostW(Math.max(320, el.clientWidth))
     measure()
     const ro = new ResizeObserver(measure)
     ro.observe(el)
@@ -339,25 +348,33 @@ function TrendChart({
     { key: 'wasted' as const, fill: '#148c96', label: 'Wasted' },
     { key: 'shifts' as const, fill: '#f0a818', label: 'Shift in / out' },
     { key: 'discrepancies' as const, fill: '#d94f3d', label: 'Discrepancy' },
-    { key: 'other' as const, fill: '#146477', label: 'Other' },
   ]
 
   const totals = rows.map(
     (r) => r.audits + r.administered + r.wasted + r.shifts + r.discrepancies + r.other,
   )
-  const rawMax = Math.max(...totals, 1)
-  const yMax = niceCeil(rawMax)
-  const ticks = yTicks(yMax)
 
-  const plotH = 168
+  // Fixed scale 0–100
+  const yMax = 100
+  const ticks = [0, 20, 40, 60, 80, 100]
+  const isMonthly = period === '90d' || period === '6m' || period === '12m'
+  const isCompactDaily = period === '30d'
+  const isWeekdayDaily = period === '7d' || period === '14d'
+
+  const plotH = 220
   const plotPadL = 36
-  const plotPadR = 10
-  const plotPadT = 14
-  const plotPadB = 42
-  const plotW = Math.max(200, hostW - plotPadL - plotPadR)
-  const groupGap = rows.length > 20 ? 2 : rows.length > 10 ? 4 : 6
+  const plotPadR = 12
+  const plotPadT = isMonthly ? 28 : 12
+  const plotPadB = isWeekdayDaily ? 40 : isCompactDaily ? 36 : 40
+  const plotW = Math.max(220, hostW - plotPadL - plotPadR)
   const groupW = plotW / Math.max(rows.length, 1)
-  const barW = Math.max(4, groupW - groupGap)
+  // Months: wider gaps · daily: tight clusters so dates sit continuous
+  const innerGap = isMonthly
+    ? Math.min(18, Math.max(8, groupW * 0.22))
+    : Math.min(3, groupW * 0.06)
+  const clusterW = Math.max(10, groupW - innerGap)
+  const barGap = isMonthly ? 2 : 1
+  const barW = Math.max(2, (clusterW - barGap * (series.length - 1)) / series.length)
   const svgW = hostW
   const svgH = plotPadT + plotH + plotPadB
 
@@ -365,14 +382,22 @@ function TrendChart({
     return <EmptyHint text="No timed activity in this period yet." />
   }
 
-  const yScale = (v: number) => plotPadT + plotH - (v / yMax) * plotH
+  const yScale = (v: number) => plotPadT + plotH - (Math.min(v, yMax) / yMax) * plotH
   const firstDataIdx = totals.findIndex((t) => t > 0)
   const lastDataIdx = totals.reduce((acc, t, i) => (t > 0 ? i : acc), 0)
 
-  const labelEvery = rows.length > 14 ? Math.ceil(rows.length / 8) : rows.length > 8 ? 2 : 1
+  const tipRow = tip ? rows[tip.idx] : null
+  const tipHeading = tipRow
+    ? tipRow.date
+      ? format(
+          new Date(tipRow.date + 'T12:00:00'),
+          isMonthly ? 'MMMM yyyy' : 'EEE d MMM yyyy',
+        )
+      : tipRow.label
+    : ''
 
   return (
-    <div ref={hostRef} className="w-full">
+    <div ref={hostRef} className="relative w-full">
       <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
         <div className="flex flex-wrap gap-3 text-[11px] font-semibold text-ink-soft">
           {series.map((s) => (
@@ -380,11 +405,18 @@ function TrendChart({
           ))}
         </div>
         <p className="text-[11px] font-semibold uppercase tracking-wide text-ink-soft/70">
-          Stacked events · {rows.length} periods
+          Side-by-side · scale 0–100 · {rows.length} {isMonthly ? 'months' : 'days'} · hover for values
         </p>
       </div>
 
-      <svg width={svgW} height={svgH} className="block w-full" role="img" aria-label="Activity trend chart">
+      <svg
+        width={svgW}
+        height={svgH}
+        className="block w-full"
+        role="img"
+        aria-label="Activity trend chart"
+        onMouseLeave={() => setTip(null)}
+      >
         <rect
           x={plotPadL}
           y={plotPadT}
@@ -393,6 +425,29 @@ function TrendChart({
           className="fill-surface/80"
           rx={4}
         />
+
+        {/* Alternating column bands on all ranges so each day/month is distinct */}
+        {rows.map((r, i) => {
+          const groupX = plotPadL + i * groupW
+          const bandFill = i % 2 === 0 ? 'rgba(11, 58, 74, 0.07)' : 'rgba(20, 140, 150, 0.08)'
+          return (
+            <g key={`band-${r.date ?? r.label}-${i}`}>
+              <rect x={groupX} y={plotPadT} width={groupW} height={plotH} fill={bandFill} />
+              {i > 0 && (
+                <line
+                  x1={groupX}
+                  x2={groupX}
+                  y1={plotPadT}
+                  y2={plotPadT + plotH}
+                  stroke="#0b3a4a"
+                  strokeWidth={1}
+                  strokeOpacity={isMonthly ? 0.22 : 0.12}
+                  strokeDasharray={isMonthly ? '3 4' : '2 3'}
+                />
+              )}
+            </g>
+          )
+        })}
 
         {ticks.map((tick) => {
           const y = yScale(tick)
@@ -404,7 +459,7 @@ function TrendChart({
                 y1={y}
                 y2={y}
                 stroke="#c5d5d2"
-                strokeWidth={tick === 0 ? 1.25 : 0.75}
+                strokeWidth={tick === 0 ? 1.25 : 0.7}
                 strokeDasharray={tick === 0 ? undefined : '3 3'}
               />
               <text
@@ -412,7 +467,7 @@ function TrendChart({
                 y={y + 3}
                 textAnchor="end"
                 fill="#1a3a47"
-                style={{ fontSize: 10, fontWeight: 600 }}
+                style={{ fontSize: 9, fontWeight: 600 }}
               >
                 {tick}
               </text>
@@ -432,64 +487,166 @@ function TrendChart({
         </text>
 
         {rows.map((r, i) => {
-          const x = plotPadL + i * groupW + (groupW - barW) / 2
-          let stacked = 0
-          const parts = series
-            .map((s) => ({ ...s, v: r[s.key] }))
-            .filter((s) => s.v > 0)
-          const dayTotal = totals[i]
-          const showLabel = i % labelEvery === 0 || i === rows.length - 1 || i === firstDataIdx
+          const groupX = plotPadL + i * groupW
+          const clusterX = groupX + (groupW - clusterW) / 2
+          const cx = groupX + groupW / 2
           const labelParts = splitAxisLabel(r.label)
+          const prevMonth = i > 0 && rows[i - 1]?.date ? rows[i - 1].date!.slice(0, 7) : null
+          const thisMonth = r.date?.slice(0, 7) ?? null
+          const monthChanged = Boolean(thisMonth && thisMonth !== prevMonth)
+          const monthTag =
+            isCompactDaily && monthChanged && r.date
+              ? format(new Date(r.date + 'T12:00:00'), 'MMM')
+              : null
+          const hovered = tip?.idx === i
 
           return (
-            <g key={`${r.label}-${i}`}>
-              {parts.map((b) => {
-                const y0 = stacked
-                stacked += b.v
-                const y1 = stacked
-                const top = yScale(y1)
-                const bot = yScale(y0)
-                const bh = Math.max(2, bot - top)
+            <g key={`${r.date ?? r.label}-${i}`}>
+              {isMonthly && (
+                <>
+                  <rect
+                    x={cx - Math.min(28, groupW * 0.42)}
+                    y={plotPadT - 20}
+                    width={Math.min(56, groupW * 0.84)}
+                    height={16}
+                    rx={3}
+                    fill={i % 2 === 0 ? '#0b3a4a' : '#146477'}
+                  />
+                  <text
+                    x={cx}
+                    y={plotPadT - 8.5}
+                    textAnchor="middle"
+                    fill="#e8f4f2"
+                    style={{ fontSize: rows.length > 10 ? 8 : 9, fontWeight: 700 }}
+                  >
+                    {r.label}
+                  </text>
+                </>
+              )}
+
+              {/* Hover highlight for the whole day/month column */}
+              {hovered && (
+                <rect
+                  x={groupX}
+                  y={plotPadT}
+                  width={groupW}
+                  height={plotH}
+                  fill="rgba(11, 58, 74, 0.1)"
+                  rx={2}
+                />
+              )}
+
+              {!isMonthly && (
+                <line
+                  x1={cx}
+                  x2={cx}
+                  y1={plotPadT + plotH}
+                  y2={plotPadT + plotH + 4}
+                  stroke="#0b3a4a"
+                  strokeWidth={1}
+                  strokeOpacity={0.45}
+                />
+              )}
+
+              {series.map((s, si) => {
+                const v = r[s.key]
+                const x = clusterX + si * (barW + barGap)
+                const top = yScale(v)
+                const bh = Math.max(v > 0 ? 3 : 0, plotPadT + plotH - top)
                 return (
-                  <g key={b.key}>
-                    <title>{`${r.label} · ${b.label}: ${b.v} · total ${dayTotal}`}</title>
-                    <rect x={x} y={top} width={barW} height={bh} fill={b.fill} rx={y0 === 0 ? 1.5 : 0} />
+                  <g key={s.key}>
+                    {v > 0 && (
+                      <rect
+                        x={x}
+                        y={top}
+                        width={barW}
+                        height={bh}
+                        fill={s.fill}
+                        rx={1}
+                        opacity={hovered ? 1 : 0.92}
+                        stroke={hovered ? '#0a1f28' : 'none'}
+                        strokeWidth={hovered ? 0.75 : 0}
+                      />
+                    )}
                   </g>
                 )
               })}
-              {dayTotal > 0 && barW >= 10 && (
+
+              {/* Full-height hit area — thin bars are hard to target alone */}
+              <rect
+                x={groupX}
+                y={plotPadT}
+                width={groupW}
+                height={plotH}
+                fill="transparent"
+                className="cursor-pointer"
+                onMouseEnter={() =>
+                  setTip({
+                    idx: i,
+                    x: cx,
+                    y: plotPadT + 8,
+                  })
+                }
+                onMouseMove={() =>
+                  setTip((prev) =>
+                    prev?.idx === i ? prev : { idx: i, x: cx, y: plotPadT + 8 },
+                  )
+                }
+              />
+
+              {isMonthly ? (
                 <text
-                  x={x + barW / 2}
-                  y={yScale(dayTotal) - 4}
+                  x={cx}
+                  y={plotPadT + plotH + 16}
                   textAnchor="middle"
                   fill="#0a1f28"
-                  style={{ fontSize: 9, fontWeight: 700 }}
+                  style={{ fontSize: 10, fontWeight: 700 }}
                 >
-                  {dayTotal}
+                  {r.label}
                 </text>
-              )}
-              {showLabel && (
+              ) : isWeekdayDaily ? (
                 <>
                   <text
-                    x={x + barW / 2}
-                    y={plotPadT + plotH + 16}
+                    x={cx}
+                    y={plotPadT + plotH + 14}
                     textAnchor="middle"
                     fill="#0a1f28"
-                    style={{ fontSize: rows.length > 16 ? 8 : 10, fontWeight: 700 }}
+                    style={{ fontSize: period === '14d' ? 8 : 9, fontWeight: 700 }}
                   >
                     {labelParts[0]}
                   </text>
-                  {labelParts[1] && (
+                  <text
+                    x={cx}
+                    y={plotPadT + plotH + 26}
+                    textAnchor="middle"
+                    fill="#146477"
+                    style={{ fontSize: 8, fontWeight: 600 }}
+                  >
+                    {labelParts[1] ?? ''}
+                  </text>
+                </>
+              ) : (
+                <>
+                  {monthTag && (
                     <text
-                      x={x + barW / 2}
-                      y={plotPadT + plotH + 28}
+                      x={cx}
+                      y={plotPadT + plotH + 12}
                       textAnchor="middle"
-                      fill="#146477"
-                      style={{ fontSize: 8, fontWeight: 600 }}
+                      fill="#0b3a4a"
+                      style={{ fontSize: 7, fontWeight: 700 }}
                     >
-                      {labelParts[1]}
+                      {monthTag}
                     </text>
                   )}
+                  <text
+                    x={cx}
+                    y={plotPadT + plotH + (monthTag ? 24 : 16)}
+                    textAnchor="middle"
+                    fill="#0a1f28"
+                    style={{ fontSize: 8, fontWeight: 700 }}
+                  >
+                    {r.label}
+                  </text>
                 </>
               )}
             </g>
@@ -514,6 +671,32 @@ function TrendChart({
         />
       </svg>
 
+      {tip && tipRow && (
+        <div
+          className="pointer-events-none absolute z-20 min-w-[160px] rounded-lg border border-line bg-panel px-3 py-2 shadow-lg"
+          style={{
+            left: Math.min(Math.max(8, tip.x - 80), Math.max(8, hostW - 180)),
+            top: Math.max(4, tip.y),
+          }}
+        >
+          <p className="mb-1.5 text-xs font-bold text-ink">{tipHeading}</p>
+          <ul className="space-y-1">
+            {series.map((s) => (
+              <li key={s.key} className="flex items-center justify-between gap-4 text-[11px]">
+                <span className="inline-flex items-center gap-1.5 font-semibold text-ink-soft">
+                  <span className="inline-block h-2 w-2 rounded-full" style={{ background: s.fill }} />
+                  {s.label}
+                </span>
+                <span className="font-display text-sm font-bold text-ink">{tipRow[s.key]}</span>
+              </li>
+            ))}
+          </ul>
+          <p className="mt-1.5 border-t border-line/70 pt-1 text-[10px] font-semibold uppercase tracking-wide text-ink-soft">
+            Total {totals[tip.idx]} events
+          </p>
+        </div>
+      )}
+
       {firstDataIdx >= 0 && (
         <p className="mt-2 text-[11px] text-ink-soft">
           Activity from <span className="font-semibold text-ink">{rows[firstDataIdx]?.label}</span>
@@ -523,28 +706,14 @@ function TrendChart({
               to <span className="font-semibold text-ink">{rows[lastDataIdx]?.label}</span>
             </>
           ) : null}
-          . Empty periods are included so the full selected range stays visible.
+          .{' '}
+          {isMonthly
+            ? 'Alternating columns mark each month — hover for values.'
+            : 'Alternating columns mark each day — hover for values.'}
         </p>
       )}
     </div>
   )
-}
-
-/** Round max up to a clean chart ceiling */
-function niceCeil(n: number) {
-  if (n <= 4) return Math.max(4, n)
-  if (n <= 10) return Math.ceil(n / 2) * 2
-  if (n <= 20) return Math.ceil(n / 5) * 5
-  const step = n <= 50 ? 10 : 20
-  return Math.ceil(n / step) * step
-}
-
-function yTicks(max: number) {
-  const steps = max <= 4 ? max : max <= 10 ? 5 : 4
-  const step = max / steps
-  const ticks: number[] = []
-  for (let i = 0; i <= steps; i++) ticks.push(Math.round(i * step))
-  return [...new Set(ticks)]
 }
 
 /** "Tue 4" → ["Tue", "4"] · "MMM yy" → ["MMM", "yy"] */

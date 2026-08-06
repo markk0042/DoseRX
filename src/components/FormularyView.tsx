@@ -10,7 +10,12 @@ export function FormularyView() {
     return PHECC_FORMULARY.filter((m) => {
       if (grade === 'CD') return m.controlled
       if (grade !== 'all' && !m.grades.includes(grade)) return false
-      if (q && !m.name.toLowerCase().includes(q.toLowerCase())) return false
+      if (
+        q &&
+        !`${m.name} ${m.strength} ${m.presentation}`.toLowerCase().includes(q.toLowerCase())
+      ) {
+        return false
+      }
       return true
     })
   }, [grade, q])
@@ -20,7 +25,8 @@ export function FormularyView() {
       <div className="rounded-xl border border-line bg-panel p-4">
         <h2 className="font-display text-2xl font-bold">PHECC Medication Formulary 2026</h2>
         <p className="mb-3 text-sm text-ink-soft/80">
-          Source: phecc.ie medication list (updated April 2026). Bag stock is seeded from this formulary by clinical grade.
+          Source: phecc.ie medication list (updated April 2026). Each drug has a medication profile
+          (strength, dose unit, stock unit, pack size) used for stock and dosing.
         </p>
         <div className="flex flex-wrap gap-2">
           {(['all', 'EMT', 'Paramedic', 'AP', 'CD'] as const).map((g) => (
@@ -44,12 +50,15 @@ export function FormularyView() {
         </div>
       </div>
 
-      <div className="overflow-hidden rounded-xl border border-line bg-panel">
-        <table className="w-full min-w-[700px] text-left text-sm">
+      <div className="overflow-x-auto overflow-hidden rounded-xl border border-line bg-panel">
+        <table className="w-full min-w-[980px] text-left text-sm">
           <thead className="bg-sea/5 text-xs uppercase tracking-wide text-ink-soft">
             <tr>
               <th className="px-4 py-2">Medication</th>
-              <th className="px-4 py-2">Presentation</th>
+              <th className="px-4 py-2">Strength</th>
+              <th className="px-4 py-2">Dose unit</th>
+              <th className="px-4 py-2">Stock unit</th>
+              <th className="px-4 py-2">Pack size</th>
               <th className="px-4 py-2">Grades</th>
               <th className="px-4 py-2">Category</th>
               <th className="px-4 py-2">CD</th>
@@ -58,8 +67,25 @@ export function FormularyView() {
           <tbody>
             {rows.map((m) => (
               <tr key={m.id} className="border-t border-line/70">
-                <td className="px-4 py-2.5 font-semibold">{m.name}</td>
-                <td className="px-4 py-2.5 text-ink-soft">{m.presentation}</td>
+                <td className="px-4 py-2.5">
+                  <p className="font-semibold">{m.name}</p>
+                  <p className="text-xs text-ink-soft">{m.presentation}</p>
+                </td>
+                <td className="px-4 py-2.5 font-mono text-xs font-semibold">{m.strength}</td>
+                <td className="px-4 py-2.5">
+                  <span className="rounded bg-surface px-1.5 py-0.5 text-[11px] font-bold uppercase">
+                    {m.doseUnit}
+                  </span>
+                </td>
+                <td className="px-4 py-2.5">
+                  <span className="rounded bg-surface px-1.5 py-0.5 text-[11px] font-bold uppercase">
+                    {m.stockUnit}
+                  </span>
+                </td>
+                <td className="px-4 py-2.5 text-ink-soft">
+                  <span className="font-semibold text-ink">{m.packSize}</span> {m.doseUnit}
+                  <span className="text-ink-soft/60"> / {m.stockUnit}</span>
+                </td>
                 <td className="px-4 py-2.5">
                   <div className="flex flex-wrap gap-1">
                     {m.grades.map((g: ClinicalGrade) => (
