@@ -59,7 +59,10 @@ export function ScanFlowView() {
   const [submitting, setSubmitting] = useState(false)
 
   const bag = bagId ? getBag(bagId) : undefined
-  const item = bag && itemId ? bag.items.find((i) => i.id === itemId) : undefined
+  const item =
+    bag && itemId
+      ? bag.items.find((i) => i.id === itemId) || resolveStockItem(bag, itemId)
+      : undefined
   const activeShift = bagId ? getActiveShift(bagId) : undefined
   const options = useMemo(
     () => filterOptionsForGrade(item?.medicationId ?? '', currentUser?.grade ?? 'AP'),
@@ -117,7 +120,7 @@ export function ScanFlowView() {
         )
         return
       }
-      setItemId(payload.itemId)
+      setItemId(foundItem.id)
       const opts = filterOptionsForGrade(foundItem.medicationId, currentUser?.grade ?? 'AP')
       setDose(opts.doses[0] ?? '')
       setRoute(opts.routes[0] ?? '')

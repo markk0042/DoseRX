@@ -17,7 +17,6 @@ import {
   QrCode,
   RotateCcw,
   Syringe,
-  Tent,
   BarChart3,
   X,
 } from 'lucide-react'
@@ -41,7 +40,6 @@ export type View =
   | 'bag-detail'
   | 'discrepancies'
   | 'map'
-  | 'events'
   | 'analytics'
 
 type NavItem = {
@@ -58,7 +56,6 @@ const nav: NavItem[] = [
   { id: 'administer', label: 'Administer / Waste', icon: Syringe },
   { id: 'discrepancies', label: 'Discrepancies', icon: FileWarning },
   { id: 'map', label: 'Live Map', icon: Map, adminOnly: true },
-  { id: 'events', label: 'Event Packs', icon: Tent, adminOnly: true },
   { id: 'labels', label: 'QR Generator', icon: Printer, adminOnly: true },
   { id: 'bags', label: 'Drug Bags', icon: ClipboardList, adminOnly: true },
   { id: 'stock', label: 'Stock Control', icon: PackagePlus, adminOnly: true },
@@ -382,7 +379,7 @@ export function Shell({
             </h1>
             <p className="mt-1 hidden max-w-2xl text-sm text-ink-soft/80 sm:block">
               {isManagement
-                ? 'Stock, bags, map, discrepancies, event packs, CDs, and HPRA-ready audit.'
+                ? 'Stock, bags, map, discrepancies, CDs, and HPRA-ready audit.'
                 : 'Offline-capable bag sign-out, administer/waste, and discrepancy reporting. Witness uses PIN.'}
             </p>
           </div>
