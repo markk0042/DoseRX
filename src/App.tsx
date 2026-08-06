@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { Analytics } from '@vercel/analytics/react'
 import { ActivityView } from './components/ActivityView'
 import { AdministerView } from './components/AdministerView'
 import { AdminMapView } from './components/AdminMapView'
@@ -84,6 +85,7 @@ export default function App() {
   return (
     <AppProvider>
       <AppRoutes />
+      <Analytics />
     </AppProvider>
   )
 }
