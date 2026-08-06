@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { ActivityView } from './components/ActivityView'
 import { AdministerView } from './components/AdministerView'
 import { AdminMapView } from './components/AdminMapView'
@@ -17,15 +17,26 @@ import { ScanFlowView } from './components/ScanFlowView'
 import { ADMIN_DEFAULT, Shell, STAFF_DEFAULT, type View } from './components/Shell'
 import { useApp } from './context/AppContext'
 import { AppProvider } from './context/AppProvider'
-import { useInactivityHardReload } from './hooks/useInactivityHardReload'
+import { isTryDemoUrl, useInactivityHardReload } from './hooks/useInactivityHardReload'
+
+/** Public Try demo staff account (no PIN) */
+const TRY_DEMO_USER_ID = 'staff-1'
 
 function AppRoutes() {
-  const { currentUser, isManagement } = useApp()
+  const { currentUser, setCurrentUser, isManagement } = useApp()
   const [view, setView] = useState<View>(STAFF_DEFAULT)
   const [selectedBagId, setSelectedBagId] = useState<string | null>(null)
+  const tryDemo = isTryDemoUrl()
 
-  // Public try-demo: hard refresh after 10 minutes idle and return to login
+  // Hard refresh after 10 minutes idle (public try-demo / shared devices)
   useInactivityHardReload(10 * 60 * 1000)
+
+  // Try demo link (?demo=1): enter as staff with no login screen
+  useEffect(() => {
+    if (!tryDemo || currentUser) return
+    setCurrentUser(TRY_DEMO_USER_ID)
+    setView(STAFF_DEFAULT)
+  }, [tryDemo, currentUser, setCurrentUser])
 
   if (!currentUser) {
     return (
