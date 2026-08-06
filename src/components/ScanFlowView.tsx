@@ -4,7 +4,7 @@ import { useCallback, useMemo, useState } from 'react'
 import { filterOptionsForGrade } from '../data/cpg'
 import { useApp } from '../context/AppContext'
 import { captureLocation } from '../lib/geo'
-import { parseQrPayload } from '../lib/qr'
+import { parseQrPayload, resolveStockItem } from '../lib/qr'
 import type { PhotoEvidence, StaffMember, TagStatus } from '../types'
 import { PhotoCapture } from './PhotoCapture'
 import { BusyOverlay } from './BusyOverlay'
@@ -90,12 +90,15 @@ export function ScanFlowView() {
     (text: string) => {
       const payload = parseQrPayload(text)
       if (!payload) {
-        setScanError('Unrecognised QR. Expect DoseRX bag or medication label.')
+        const clipped = text.trim().slice(0, 80)
+        setScanError(
+          `Unrecognised QR${clipped ? ` (“${clipped}${text.trim().length > 80 ? '…' : ''}”)` : ''}. Expect DOSERX|BAG|… or DOSERX|MED|….`,
+        )
         return
       }
       const foundBag = getBag(payload.bagId)
       if (!foundBag) {
-        setScanError('Bag not found for this QR.')
+        setScanError(`Bag not found for this QR (id: ${payload.bagId}). Labels must match this device’s bag data.`)
         return
       }
       setScanError('')
@@ -107,9 +110,11 @@ export function ScanFlowView() {
         return
       }
 
-      const foundItem = foundBag.items.find((i) => i.id === payload.itemId)
+      const foundItem = resolveStockItem(foundBag, payload.itemId, payload.trackingCode)
       if (!foundItem) {
-        setScanError('Medication vial not found for this QR.')
+        setScanError(
+          `Medication not found in ${foundBag.code}. Open QR Generator on this same app deploy, or Reset demo data, then rescan.`,
+        )
         return
       }
       setItemId(payload.itemId)
@@ -768,22 +773,27 @@ function TagPill({ status }: { status: TagStatus }) {
 
 function DemoQuickPick({ onPick }: { onPick: (text: string) => void }) {
   const { state } = useApp()
-  const emtBags = state.bags.filter((b) => b.grade === 'EMT' && b.type === 'standard')
-  const onShift = state.bags.filter((b) => b.activeShiftId)
-  const sampleMedBag = emtBags[0] ?? state.bags.find((b) => b.items.length > 0)
-  const med = sampleMedBag?.items[0]
+  const [medBagId, setMedBagId] = useState(state.bags[0]?.id ?? '')
+  const bags = state.bags
+  const onShift = bags.filter((b) => b.activeShiftId)
+  const medBag = bags.find((b) => b.id === medBagId) ?? bags[0]
+  const meds = (medBag?.items ?? []).slice(0, 12)
 
-  if (emtBags.length === 0 && state.bags.length === 0) return null
+  if (bags.length === 0) return null
 
   return (
     <div className="mt-4 border-t border-line pt-3">
       <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-ink-soft">
         Demo quick pick (no camera)
       </p>
+      <p className="mb-3 text-[11px] text-ink-soft/80">
+        Use these to test the flow if the camera cannot read an on-screen QR (common on laptops). Real printed labels
+        work the same way.
+      </p>
 
-      <p className="mb-1.5 text-[11px] font-semibold text-ink-soft/80">EMT drug bags</p>
+      <p className="mb-1.5 text-[11px] font-semibold text-ink-soft/80">Scan a bag (shift menu)</p>
       <div className="mb-3 flex flex-wrap gap-2">
-        {emtBags.map((b) => (
+        {bags.map((b) => (
           <button
             key={b.id}
             type="button"
@@ -791,28 +801,45 @@ function DemoQuickPick({ onPick }: { onPick: (text: string) => void }) {
             className="rounded-lg border border-line bg-surface px-3 py-1.5 text-xs font-semibold hover:border-sea-mid"
           >
             {b.code}
-            <span className="ml-1 font-medium text-ink-soft/70">· {b.name}</span>
+            <span className="ml-1 font-medium text-ink-soft/70">· {b.grade === 'AP' ? 'AP' : b.grade}</span>
           </button>
         ))}
-        {emtBags.length === 0 && (
-          <p className="text-xs text-ink-soft">No EMT bags in demo data.</p>
-        )}
       </div>
 
-      {(med || onShift.length > 0) && (
+      <p className="mb-1.5 text-[11px] font-semibold text-ink-soft/80">Scan a medication (opens drug → Administer)</p>
+      <label className="mb-2 flex flex-wrap items-center gap-2 text-xs">
+        <span className="font-semibold text-ink-soft">From bag</span>
+        <select
+          value={medBag?.id ?? ''}
+          onChange={(e) => setMedBagId(e.target.value)}
+          className="rounded-lg border border-line bg-surface px-2 py-1.5 text-xs font-semibold"
+        >
+          {bags.map((b) => (
+            <option key={b.id} value={b.id}>
+              {b.code} — {b.name} ({b.items.length} meds)
+            </option>
+          ))}
+        </select>
+      </label>
+      <div className="mb-3 flex flex-wrap gap-2">
+        {meds.map((item) => (
+          <button
+            key={item.id}
+            type="button"
+            onClick={() => onPick(`DOSERX|MED|${medBag!.id}|${item.medicationId}`)}
+            className="rounded-lg border border-sea/30 bg-mint/40 px-3 py-1.5 text-xs font-semibold hover:border-sea"
+          >
+            {item.name.length > 28 ? `${item.name.slice(0, 26)}…` : item.name}
+            <span className="ml-1 font-medium text-ink-soft/70">· qty {item.quantity}</span>
+          </button>
+        ))}
+        {meds.length === 0 && <p className="text-xs text-ink-soft">No medications in this bag.</p>}
+      </div>
+
+      {onShift.length > 0 && (
         <>
-          <p className="mb-1.5 text-[11px] font-semibold text-ink-soft/80">Other demo scans</p>
+          <p className="mb-1.5 text-[11px] font-semibold text-ink-soft/80">Bags on shift (quick return)</p>
           <div className="flex flex-wrap gap-2">
-            {sampleMedBag && med && (
-              <button
-                type="button"
-                onClick={() => onPick(`DOSERX|MED|${sampleMedBag.id}|${med.id}`)}
-                className="rounded-lg border border-line bg-surface px-3 py-1.5 text-xs font-semibold"
-              >
-                Med · {med.name.slice(0, 22)}
-                {med.name.length > 22 ? '…' : ''}
-              </button>
-            )}
             {onShift.map((b) => (
               <button
                 key={`return-${b.id}`}

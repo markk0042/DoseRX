@@ -22,8 +22,8 @@ import {
   uploadEvidencePhoto,
 } from '../lib/supabaseSync'
 
-const LIVE_KEY = 'doserx-v5-live'
-const SANDBOX_KEY = 'doserx-v5-sandbox'
+const LIVE_KEY = 'doserx-v6-live'
+const SANDBOX_KEY = 'doserx-v6-sandbox'
 
 function mergeStaff(rawStaff: AppState['staff'] | undefined) {
   if (!rawStaff?.length) return STAFF
@@ -102,24 +102,26 @@ function offline() {
 
 /** Event packs: full grade formulary, optionally plus CDs for P/AP */
 function buildEventPackItems(
+  bagId: string,
   grade: 'EMT' | 'Paramedic' | 'AP',
   includeControlled: boolean,
 ): StockItem[] {
   const standard = medsForGrade(grade, false)
   const cds =
     includeControlled && grade !== 'EMT' ? controlledMedsForGrade(grade as 'Paramedic' | 'AP') : []
-  return [...standard, ...cds].map((m, i) => stockFromDef(m, i, 'EVT'))
+  return [...standard, ...cds].map((m, i) => stockFromDef(m, i, 'EVT', bagId))
 }
 
 function stockFromDef(
   m: ReturnType<typeof medsForGrade>[number],
   i: number,
   lotPrefix: string,
+  bagId: string,
 ): StockItem {
   const d = new Date()
   d.setMonth(d.getMonth() + 6 + (i % 12))
   return {
-    id: uuid(),
+    id: `${bagId}__${m.id}`,
     medicationId: m.id,
     name: m.name,
     presentation: m.presentation,
@@ -806,7 +808,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
             tagStatus: 'green',
             assignedVehicle: vehicle || `Event · ${eventName}`,
             activeShiftId: null,
-            items: buildEventPackItems(grade, includeCds),
+            items: buildEventPackItems(id, grade, includeCds),
             eventName,
             eventStartsAt: startsAt,
             eventEndsAt: endsAt,

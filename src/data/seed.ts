@@ -1,10 +1,14 @@
 import { v4 as uuid } from 'uuid'
 import type { ActivityLog, ClinicalGrade, DrugBag, StaffMember, StockItem } from '../types'
 import { controlledMedsForGrade, medsForGrade } from './formulary'
+import { stockItemId } from '../lib/qr'
 
-function lot() {
+function lot(seed: string) {
+  // Deterministic-ish lot from bag+med so labels match across devices in demo
+  let h = 0
+  for (let i = 0; i < seed.length; i++) h = (h * 31 + seed.charCodeAt(i)) >>> 0
   const letters = 'ABCDEFGHJKLMNPQRSTUVWXYZ'
-  return `${letters[Math.floor(Math.random() * letters.length)]}${letters[Math.floor(Math.random() * letters.length)]}${Math.floor(1000 + Math.random() * 9000)}`
+  return `${letters[h % letters.length]}${letters[(h >> 5) % letters.length]}${1000 + (h % 9000)}`
 }
 
 function expiry(monthsAhead: number) {
@@ -13,19 +17,19 @@ function expiry(monthsAhead: number) {
   return d.toISOString().slice(0, 10)
 }
 
-function buildItems(grade: ClinicalGrade, controlledOnly: boolean): StockItem[] {
+function buildItems(bagId: string, grade: ClinicalGrade, controlledOnly: boolean): StockItem[] {
   const defs = controlledOnly
     ? controlledMedsForGrade(grade as 'Paramedic' | 'AP')
     : medsForGrade(grade, false)
 
   return defs.map((m, i) => ({
-    id: uuid(),
+    id: stockItemId(bagId, m.id),
     medicationId: m.id,
     name: m.name,
     presentation: m.presentation,
     quantity: m.defaultQty,
     parLevel: m.defaultQty,
-    lotNumber: lot(),
+    lotNumber: lot(`${bagId}:${m.id}`),
     expiryDate: expiry(6 + (i % 18)),
     controlled: m.controlled,
     schedule: m.schedule,
@@ -33,8 +37,10 @@ function buildItems(grade: ClinicalGrade, controlledOnly: boolean): StockItem[] 
   }))
 }
 
-function seal() {
-  return `SL-${Math.floor(100000 + Math.random() * 900000)}`
+function seal(bagId: string) {
+  let h = 0
+  for (let i = 0; i < bagId.length; i++) h = (h * 33 + bagId.charCodeAt(i)) >>> 0
+  return `SL-${100000 + (h % 900000)}`
 }
 
 export const STAFF: StaffMember[] = [
@@ -71,12 +77,12 @@ export function createInitialBags(): DrugBag[] {
       name: 'EMT Drug Bag 1',
       grade: 'EMT',
       type: 'standard',
-      sealNumber: seal(),
+      sealNumber: seal('bag-emt-01'),
       status: 'sealed',
       tagStatus: 'green',
       activeShiftId: null,
       assignedVehicle: 'A01',
-      items: buildItems('EMT', false),
+      items: buildItems('bag-emt-01', 'EMT', false),
     },
     {
       id: 'bag-emt-02',
@@ -84,12 +90,12 @@ export function createInitialBags(): DrugBag[] {
       name: 'EMT Drug Bag 2',
       grade: 'EMT',
       type: 'standard',
-      sealNumber: seal(),
+      sealNumber: seal('bag-emt-02'),
       status: 'sealed',
       tagStatus: 'green',
       activeShiftId: null,
       assignedVehicle: 'A02',
-      items: buildItems('EMT', false),
+      items: buildItems('bag-emt-02', 'EMT', false),
     },
     {
       id: 'bag-p-01',
@@ -97,12 +103,12 @@ export function createInitialBags(): DrugBag[] {
       name: 'Paramedic Drug Bag 1',
       grade: 'Paramedic',
       type: 'standard',
-      sealNumber: seal(),
+      sealNumber: seal('bag-p-01'),
       status: 'sealed',
       tagStatus: 'green',
       activeShiftId: null,
       assignedVehicle: 'A01',
-      items: buildItems('Paramedic', false),
+      items: buildItems('bag-p-01', 'Paramedic', false),
     },
     {
       id: 'bag-p-02',
@@ -110,14 +116,14 @@ export function createInitialBags(): DrugBag[] {
       name: 'Paramedic Drug Bag 2',
       grade: 'Paramedic',
       type: 'standard',
-      sealNumber: seal(),
+      sealNumber: seal('bag-p-02'),
       status: 'check_due',
       tagStatus: 'green',
       activeShiftId: null,
       assignedVehicle: 'A02',
       lastCheckedAt: new Date(Date.now() - 1000 * 60 * 60 * 26).toISOString(),
       lastCheckedBy: 'Siobhán O\'Neill',
-      items: buildItems('Paramedic', false),
+      items: buildItems('bag-p-02', 'Paramedic', false),
     },
     {
       id: 'bag-p-03',
@@ -125,12 +131,12 @@ export function createInitialBags(): DrugBag[] {
       name: 'Paramedic Drug Bag 3',
       grade: 'Paramedic',
       type: 'standard',
-      sealNumber: seal(),
+      sealNumber: seal('bag-p-03'),
       status: 'sealed',
       tagStatus: 'green',
       activeShiftId: null,
       assignedVehicle: 'A03',
-      items: buildItems('Paramedic', false),
+      items: buildItems('bag-p-03', 'Paramedic', false),
     },
     {
       id: 'bag-ap-01',
@@ -138,12 +144,12 @@ export function createInitialBags(): DrugBag[] {
       name: 'Advanced Paramedic Drug Bag 1',
       grade: 'AP',
       type: 'standard',
-      sealNumber: seal(),
+      sealNumber: seal('bag-ap-01'),
       status: 'sealed',
       tagStatus: 'green',
       activeShiftId: null,
       assignedVehicle: 'A01',
-      items: buildItems('AP', false),
+      items: buildItems('bag-ap-01', 'AP', false),
     },
     {
       id: 'bag-ap-02',
@@ -151,12 +157,12 @@ export function createInitialBags(): DrugBag[] {
       name: 'Advanced Paramedic Drug Bag 2',
       grade: 'AP',
       type: 'standard',
-      sealNumber: seal(),
+      sealNumber: seal('bag-ap-02'),
       status: 'sealed',
       tagStatus: 'green',
       activeShiftId: null,
       assignedVehicle: 'A02',
-      items: buildItems('AP', false),
+      items: buildItems('bag-ap-02', 'AP', false),
     },
     {
       id: 'bag-ap-03',
@@ -164,14 +170,14 @@ export function createInitialBags(): DrugBag[] {
       name: 'Advanced Paramedic Drug Bag 3',
       grade: 'AP',
       type: 'standard',
-      sealNumber: seal(),
+      sealNumber: seal('bag-ap-03'),
       status: 'open',
       tagStatus: 'green',
       activeShiftId: null,
       assignedVehicle: 'A03',
       lastCheckedAt: new Date(Date.now() - 1000 * 60 * 90).toISOString(),
       lastCheckedBy: 'Niamh Walsh',
-      items: buildItems('AP', false),
+      items: buildItems('bag-ap-03', 'AP', false),
     },
     {
       id: 'bag-cd-p-01',
@@ -179,12 +185,12 @@ export function createInitialBags(): DrugBag[] {
       name: 'Paramedic Controlled Drugs',
       grade: 'Paramedic',
       type: 'controlled',
-      sealNumber: seal(),
+      sealNumber: seal('bag-cd-p-01'),
       status: 'sealed',
       tagStatus: 'green',
       activeShiftId: null,
       assignedVehicle: 'CD Safe / A01',
-      items: buildItems('Paramedic', true),
+      items: buildItems('bag-cd-p-01', 'Paramedic', true),
     },
     {
       id: 'bag-cd-ap-01',
@@ -192,12 +198,12 @@ export function createInitialBags(): DrugBag[] {
       name: 'AP Controlled Drugs',
       grade: 'AP',
       type: 'controlled',
-      sealNumber: seal(),
+      sealNumber: seal('bag-cd-ap-01'),
       status: 'sealed',
       tagStatus: 'green',
       activeShiftId: null,
       assignedVehicle: 'CD Safe / A01',
-      items: buildItems('AP', true),
+      items: buildItems('bag-cd-ap-01', 'AP', true),
     },
   ]
 }

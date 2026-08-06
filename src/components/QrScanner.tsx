@@ -18,43 +18,76 @@ export function QrScanner({
   const [manual, setManual] = useState('')
   const [error, setError] = useState('')
   const [cameraReady, setCameraReady] = useState(false)
+  const [lastSeen, setLastSeen] = useState('')
 
   useEffect(() => {
     if (!active || mode !== 'camera') return
 
     let cancelled = false
     let scanner: Html5Qrcode | null = null
-    let handled = false
+    let lastDecoded = ''
+    let lastAt = 0
 
     const start = async () => {
       try {
-        // Wait a tick so the scanner mount node exists in the DOM
-        await new Promise((r) => setTimeout(r, 50))
+        await new Promise((r) => setTimeout(r, 80))
         if (cancelled) return
 
         const el = document.getElementById(elementId)
         if (!el) {
-          setError('Scanner area not ready — use manual entry')
+          setError('Scanner area not ready — use manual entry or demo quick pick')
           setMode('manual')
           return
         }
 
         scanner = new Html5Qrcode(elementId)
+
+        // Prefer rear camera; fall back to any available device
+        let cameraConfig: MediaTrackConstraints | string = { facingMode: 'environment' }
+        try {
+          const cameras = await Html5Qrcode.getCameras()
+          if (cameras.length) {
+            const back =
+              cameras.find((c) => /back|rear|environment/i.test(c.label)) ?? cameras[cameras.length - 1]
+            cameraConfig = back.id
+          }
+        } catch {
+          /* facingMode fallback below */
+        }
+
         await scanner.start(
-          { facingMode: 'environment' },
-          { fps: 8, qrbox: { width: 240, height: 240 } },
+          cameraConfig,
+          {
+            fps: 12,
+            // Relative box works better across phone/desktop viewports than a fixed 240px
+            qrbox: (viewW, viewH) => {
+              const side = Math.floor(Math.min(viewW, viewH) * 0.72)
+              return { width: side, height: side }
+            },
+            aspectRatio: 1.333,
+          },
           (decoded) => {
-            if (handled || cancelled) return
-            handled = true
-            onScanRef.current(decoded)
+            if (cancelled) return
+            const text = decoded.trim()
+            if (!text) return
+            const now = Date.now()
+            // Debounce repeats, but allow a different code (or retry after 1.5s)
+            if (text === lastDecoded && now - lastAt < 1500) return
+            lastDecoded = text
+            lastAt = now
+            setLastSeen(text.length > 64 ? `${text.slice(0, 64)}…` : text)
+            onScanRef.current(text)
           },
           () => undefined,
         )
-        if (!cancelled) setCameraReady(true)
+        if (!cancelled) {
+          setCameraReady(true)
+          setError('')
+        }
       } catch (err) {
         if (cancelled) return
         const message = err instanceof Error ? err.message : 'Camera unavailable'
-        setError(`${message} — use manual entry or demo quick pick`)
+        setError(`${message} — use Manual / paste or Demo quick pick below`)
         setMode('manual')
         setCameraReady(false)
         if (scanner) {
@@ -99,6 +132,7 @@ export function QrScanner({
           type="button"
           onClick={() => {
             setError('')
+            setLastSeen('')
             setMode('camera')
           }}
           className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-semibold ${
@@ -120,9 +154,15 @@ export function QrScanner({
 
       {mode === 'camera' && (
         <div className="overflow-hidden rounded-xl border border-line bg-ink">
-          <div id={elementId} className="min-h-[260px] w-full overflow-hidden" />
+          <div id={elementId} className="min-h-[280px] w-full overflow-hidden [&_video]:max-h-[360px] [&_video]:w-full [&_video]:object-cover" />
           {!cameraReady && !error && (
-            <p className="bg-ink px-3 py-2 text-center text-xs text-mint-deep">Starting camera…</p>
+            <p className="bg-ink px-3 py-2 text-center text-xs text-mint-deep">Starting camera… allow access if prompted</p>
+          )}
+          {cameraReady && (
+            <p className="bg-ink px-3 py-2 text-center text-xs text-mint-deep">
+              Hold steady over a DoseRX bag or med QR
+              {lastSeen ? ` · last read: ${lastSeen}` : ''}
+            </p>
           )}
         </div>
       )}
@@ -130,7 +170,8 @@ export function QrScanner({
       {mode === 'manual' && (
         <div className="space-y-2 rounded-xl border border-line bg-panel p-4">
           <p className="text-sm text-ink-soft">
-            Paste a DoseRX QR payload, or use demo quick pick below.
+            Paste a DoseRX QR payload, or use <strong>Demo quick pick</strong> below to test meds from each bag
+            without a camera.
           </p>
           <input
             value={manual}

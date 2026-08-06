@@ -202,4 +202,4 @@ export interface AppState {
 
 export type QrPayload =
   | { kind: 'bag'; bagId: string }
-  | { kind: 'med'; bagId: string; itemId: string }
+  | { kind: 'med'; bagId: string; itemId: string; trackingCode?: string }

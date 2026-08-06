@@ -49,7 +49,7 @@ export function PrintLabelsView() {
       }
       if (content !== 'bags') {
         for (const item of bag.items) {
-          const tracking = buildTrackingCode(bag.code, item.medicationId, item.id)
+          const tracking = buildTrackingCode(bag.code, item.medicationId)
           rows.push([
             'medication',
             bag.code,
@@ -60,7 +60,7 @@ export function PrintLabelsView() {
             item.lotNumber,
             item.expiryDate,
             String(item.quantity),
-            encodeMedQr(bag.id, item.id, tracking),
+            encodeMedQr(bag.id, item.medicationId),
           ])
         }
       }
@@ -241,8 +241,8 @@ function BagLabelSection({ bag, content }: { bag: DrugBag; content: Content }) {
 }
 
 function MedLabelCard({ bag, item }: { bag: DrugBag; item: StockItem }) {
-  const tracking = buildTrackingCode(bag.code, item.medicationId, item.id)
-  const payload = encodeMedQr(bag.id, item.id, tracking)
+  const tracking = buildTrackingCode(bag.code, item.medicationId)
+  const payload = encodeMedQr(bag.id, item.medicationId)
 
   return (
     <div className="break-inside-avoid rounded-xl border border-line bg-panel p-3 shadow-sm">
@@ -257,7 +257,7 @@ function MedLabelCard({ bag, item }: { bag: DrugBag; item: StockItem }) {
         )}
       </div>
       <div className="flex gap-3">
-        <QRCodeSVG value={payload} size={100} level="M" includeMargin />
+        <QRCodeSVG value={payload} size={140} level="H" includeMargin />
         <div className="min-w-0 flex-1">
           <p className="text-sm font-bold leading-tight">{item.name}</p>
           <p className="text-[11px] text-ink-soft">{item.presentation}</p>
@@ -274,9 +274,20 @@ function MedLabelCard({ bag, item }: { bag: DrugBag; item: StockItem }) {
           <p className="text-[11px]">
             <span className="font-semibold">On hand</span> {item.quantity} {item.unit}
           </p>
+          <button
+            type="button"
+            onClick={() => {
+              void navigator.clipboard?.writeText(payload)
+            }}
+            className="mt-2 rounded border border-line bg-surface px-2 py-1 text-[10px] font-semibold print:hidden hover:border-sea"
+            title={payload}
+          >
+            Copy QR payload
+          </button>
         </div>
       </div>
-      <p className="mt-2 flex items-start gap-1 text-[10px] text-ink-soft/70">
+      <p className="mt-2 font-mono text-[9px] break-all text-ink-soft/50 print:hidden">{payload}</p>
+      <p className="mt-1 flex items-start gap-1 text-[10px] text-ink-soft/70">
         <CheckSquare size={10} className="mt-0.5 shrink-0" />
         Unique to this bag — not interchangeable with the same drug in another bag
       </p>
