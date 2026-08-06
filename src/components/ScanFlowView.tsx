@@ -259,7 +259,7 @@ export function ScanFlowView() {
       return
     }
     if (!patientRef.trim() || !dose || !route || !indication) {
-      setMsg('CAD / incident number, dose, route and indication are required.')
+      setMsg('CAD last 4 digits, dose, route and indication are required.')
       return
     }
     if (!adminWitness) {
@@ -771,12 +771,12 @@ export function ScanFlowView() {
               />
             </label>
             <label className="text-sm">
-              <span className="mb-1 block font-semibold">CAD / incident number (no patient name)</span>
+              <span className="mb-1 block font-semibold">CAD last 4 digits of incident number (no patient name)</span>
               <input
                 value={patientRef}
                 onChange={(e) => setPatientRef(e.target.value)}
                 className="w-full rounded-lg border border-line bg-surface px-3 py-2"
-                placeholder="e.g. 4821 or CAD-4821"
+                placeholder="e.g. 4821"
                 autoComplete="off"
               />
             </label>

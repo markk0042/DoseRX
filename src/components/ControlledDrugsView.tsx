@@ -65,7 +65,7 @@ export function ControlledDrugsView({ onOpenBag }: { onOpenBag: (id: string) => 
       return
     }
     if (!patientRef.trim()) {
-      setMsg('CAD / incident number required (no patient name).')
+      setMsg('CAD last 4 digits of incident number required (no patient name).')
       return
     }
     if (!dose || !route || !indication) {
@@ -212,12 +212,12 @@ export function ControlledDrugsView({ onOpenBag }: { onOpenBag: (id: string) => 
               ))}
             </select>
             <label className="block text-sm">
-              <span className="mb-1 block font-semibold">CAD / incident number (no patient name)</span>
+              <span className="mb-1 block font-semibold">CAD last 4 digits of incident number (no patient name)</span>
               <input
                 value={patientRef}
                 onChange={(e) => setPatientRef(e.target.value)}
                 className="w-full rounded-lg border border-line bg-surface px-3 py-2"
-                placeholder="e.g. 4821 or CAD-4821"
+                placeholder="e.g. 4821"
                 autoComplete="off"
               />
             </label>
