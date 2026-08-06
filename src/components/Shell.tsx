@@ -91,9 +91,22 @@ export function Shell({
   const openDiscrepancyCount = oversight.openDiscrepancies
   const onShiftCount = oversight.onShift
 
+  /** Administer / Waste nav only after a bag is signed out (staff: to them) */
+  const canAdminister = useMemo(() => {
+    if (!currentUser) return false
+    return state.bags.some((b) => {
+      if (!b.activeShiftId) return false
+      const shift = state.shifts.find((s) => s.id === b.activeShiftId && s.active)
+      if (!shift) return false
+      if (currentUser.role === 'staff') return shift.holderId === currentUser.id
+      return true
+    })
+  }, [currentUser, state.bags, state.shifts])
+
   const visibleNav = nav.filter((item) => {
     if (item.adminOnly && !isManagement) return false
     if (item.staffOnly && isManagement) return false
+    if (item.id === 'administer' && !canAdminister) return false
     return true
   })
 
@@ -108,6 +121,12 @@ export function Shell({
       setView(STAFF_DEFAULT)
     }
   }, [currentUser, isManagement, view, setView])
+
+  useEffect(() => {
+    if (view === 'administer' && !canAdminister) {
+      setView(STAFF_DEFAULT)
+    }
+  }, [view, canAdminister, setView])
 
   useEffect(() => {
     setMenuOpen(false)

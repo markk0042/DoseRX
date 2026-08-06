@@ -378,10 +378,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
           const bag = prev.bags.find((b) => b.id === bagId)
           const item = bag?.items.find((i) => i.id === itemId)
           if (!bag || !item || qty > item.quantity) return prev
+          if (!bag.activeShiftId) return prev
           const deduct = partDose ? partDose.drawn : qty
           let next = updateBag(prev, bagId, (b) => ({
             ...b,
-            status: b.activeShiftId ? 'on_shift' : 'open',
+            status: 'on_shift',
             lastKnownLocation: location ?? b.lastKnownLocation,
             items: b.items.map((i) =>
               i.id === itemId ? { ...i, quantity: Math.max(0, i.quantity - deduct) } : i,
@@ -411,9 +412,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
           const bag = prev.bags.find((b) => b.id === bagId)
           const item = bag?.items.find((i) => i.id === itemId)
           if (!bag || !item || qty > item.quantity) return prev
+          if (!bag.activeShiftId) return prev
           let next = updateBag(prev, bagId, (b) => ({
             ...b,
-            status: b.activeShiftId ? 'on_shift' : 'open',
+            status: 'on_shift',
             items: b.items.map((i) =>
               i.id === itemId ? { ...i, quantity: Math.max(0, i.quantity - qty) } : i,
             ),

@@ -196,6 +196,10 @@ export function ScanFlowView() {
       setMsg('Sign in required.')
       return
     }
+    if (!activeShift || activeShift.holderId !== currentUser.id) {
+      setMsg('Bag must be signed out to you on shift before administering.')
+      return
+    }
     if (!patientRef.trim() || !dose || !route || !indication) {
       setMsg('CAD / incident number, dose, route and indication are required.')
       return
@@ -647,7 +651,11 @@ export function ScanFlowView() {
 
           <button
             type="button"
-            disabled={item.quantity < 1}
+            disabled={
+              item.quantity < 1 ||
+              !activeShift ||
+              (!!currentUser && activeShift.holderId !== currentUser.id)
+            }
             onClick={() => {
               setDose(options.doses[0] ?? '')
               setRoute(options.routes[0] ?? '')
@@ -658,10 +666,25 @@ export function ScanFlowView() {
           >
             Administer
           </button>
+          {!activeShift && (
+            <p className="text-sm text-coral">
+              This bag is not signed out on shift. Scan the bag QR and complete sign-out before administering.
+            </p>
+          )}
+          {activeShift && currentUser && activeShift.holderId !== currentUser.id && (
+            <p className="text-sm text-coral">
+              Bag is on shift with {activeShift.holderName}. Only the holder can administer from this bag.
+            </p>
+          )}
         </div>
       )}
 
-      {phase === 'med-admin' && bag && item && (
+      {phase === 'med-admin' &&
+        bag &&
+        item &&
+        activeShift &&
+        currentUser &&
+        activeShift.holderId === currentUser.id && (
         <div className="space-y-3 rounded-xl border border-line bg-panel p-5">
           <h3 className="font-display text-xl font-bold">Administer · {item.name}</h3>
           <div className="grid gap-3 sm:grid-cols-2">

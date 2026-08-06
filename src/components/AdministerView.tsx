@@ -8,18 +8,27 @@ import { BusyOverlay } from './BusyOverlay'
 import { WitnessVerify } from './WitnessVerify'
 
 export function AdministerView({ preferredBagId }: { preferredBagId?: string }) {
-  const { state, currentUser, recordAdministration, recordWaste, getBag } = useApp()
-  const usableBags = state.bags.filter((b) => {
-    if (!currentUser) return true
-    if (b.eventEndsAt && new Date(b.eventEndsAt).getTime() < Date.now()) return false
-    if (b.type === 'controlled') {
-      if (currentUser.grade === 'EMT') return false
-      if (b.grade === 'AP' && currentUser.grade !== 'AP') return false
-    }
-    return true
-  })
+  const { state, currentUser, recordAdministration, recordWaste, getBag, getActiveShift } = useApp()
 
-  const [bagId, setBagId] = useState(preferredBagId ?? usableBags[0]?.id ?? '')
+  /** Only bags currently signed out on shift — blocks admin/waste before checkout */
+  const usableBags = useMemo(() => {
+    return state.bags.filter((b) => {
+      if (!b.activeShiftId) return false
+      if (b.eventEndsAt && new Date(b.eventEndsAt).getTime() < Date.now()) return false
+      const shift = state.shifts.find((s) => s.id === b.activeShiftId && s.active)
+      if (!shift) return false
+      if (!currentUser) return false
+      // Staff may only use bags they personally signed out
+      if (currentUser.role === 'staff' && shift.holderId !== currentUser.id) return false
+      if (b.type === 'controlled') {
+        if (currentUser.grade === 'EMT') return false
+        if (b.grade === 'AP' && currentUser.grade !== 'AP') return false
+      }
+      return true
+    })
+  }, [state.bags, state.shifts, currentUser])
+
+  const [bagId, setBagId] = useState(preferredBagId ?? '')
   const [itemId, setItemId] = useState('')
   const [qty, setQty] = useState(1)
   const [patientRef, setPatientRef] = useState('')
@@ -37,7 +46,18 @@ export function AdministerView({ preferredBagId }: { preferredBagId?: string }) 
   const [ackOutOfScope, setAckOutOfScope] = useState(false)
   const [busy, setBusy] = useState(false)
 
+  useEffect(() => {
+    if (preferredBagId && usableBags.some((b) => b.id === preferredBagId)) {
+      setBagId(preferredBagId)
+      return
+    }
+    if (!usableBags.some((b) => b.id === bagId)) {
+      setBagId(usableBags[0]?.id ?? '')
+    }
+  }, [usableBags, preferredBagId, bagId])
+
   const bag = getBag(bagId)
+  const activeShift = bagId ? getActiveShift(bagId) : undefined
   const items = bag?.items.filter((i) => i.quantity > 0) ?? []
   const selected = items.find((i) => i.id === itemId) ?? items[0]
   const needsWitness = mode === 'waste' || !!selected?.controlled
@@ -91,6 +111,14 @@ export function AdministerView({ preferredBagId }: { preferredBagId?: string }) 
     if (busy) return
     if (!currentUser || !bag || !selected) {
       setMsg('Sign in and select bag + medication.')
+      return
+    }
+    if (!bag.activeShiftId || !activeShift) {
+      setMsg('Bag must be signed out on shift before administering or wasting.')
+      return
+    }
+    if (currentUser.role === 'staff' && activeShift.holderId !== currentUser.id) {
+      setMsg('Only the staff member who signed out this bag can administer or waste from it.')
       return
     }
     if (needsWitness && !witness) {
@@ -191,6 +219,22 @@ export function AdministerView({ preferredBagId }: { preferredBagId?: string }) 
     return <p className="text-sm text-ink-soft">Sign in to administer medications.</p>
   }
 
+  if (usableBags.length === 0) {
+    return (
+      <div className="mx-auto max-w-2xl rounded-xl border border-amber/40 bg-amber-soft/40 p-5">
+        <h2 className="font-display text-2xl font-bold">Administer / waste</h2>
+        <p className="mt-2 text-sm text-ink">
+          No bag is signed out on shift
+          {currentUser.role === 'staff' ? ' to you' : ''} yet.
+        </p>
+        <p className="mt-2 text-sm text-ink-soft">
+          Use <strong>QR · Bags & Meds</strong> to scan a bag and complete shift sign-out first. Medications can only be
+          administered or wasted from a bag that is checked out.
+        </p>
+      </div>
+    )
+  }
+
   return (
     <div className="mx-auto max-w-2xl space-y-4">
       {busy && (
@@ -205,8 +249,17 @@ export function AdministerView({ preferredBagId }: { preferredBagId?: string }) 
           {currentUser.name} · {currentUser.grade === 'AP' ? 'AP' : currentUser.grade} · PHECC CPG {CPG_VERSION}
         </p>
         <p className="mb-4 text-xs text-ink-soft">
-          Dose / route / indication filtered to your clinical grade. Controlled drugs use drawn / given / wasted.
+          Only bags currently on shift are listed. Dose / route / indication follow your clinical grade.
         </p>
+
+        {activeShift && (
+          <div className="mb-4 rounded-lg border border-ok/30 bg-ok-soft/40 px-3 py-2 text-xs text-ink">
+            <span className="font-semibold text-ok">On shift</span>
+            {' · '}
+            held by {activeShift.holderName} since{' '}
+            {new Date(activeShift.signedOutAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+          </div>
+        )}
 
         <div className="mb-4 flex gap-2">
           <button
@@ -227,7 +280,7 @@ export function AdministerView({ preferredBagId }: { preferredBagId?: string }) 
 
         <div className="space-y-3">
           <label className="block text-sm">
-            <span className="mb-1 block font-semibold">Drug bag</span>
+            <span className="mb-1 block font-semibold">Drug bag (on shift)</span>
             <select value={bagId} onChange={(e) => setBagId(e.target.value)} className="w-full rounded-lg border border-line bg-surface px-3 py-2">
               {usableBags.map((b) => (
                 <option key={b.id} value={b.id}>
