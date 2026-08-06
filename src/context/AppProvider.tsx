@@ -138,6 +138,7 @@ function stockFromDef(
 
 export function AppProvider({ children }: { children: ReactNode }) {
   const [state, setState] = useState<AppState>(() => loadState(false))
+  const [toast, setToast] = useState<string | null>(null)
   const [cloudReady, setCloudReady] = useState(false)
   const pushTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const stateRef = useRef(state)
@@ -887,9 +888,28 @@ export function AppProvider({ children }: { children: ReactNode }) {
         const fresh = freshState(state.sandboxMode)
         saveState(fresh)
         setState(fresh)
+        setToast('Demo Data Resetted')
       },
     }
   }, [state, persistWith, pushActivity, updateBag])
 
-  return <AppContext.Provider value={value}>{children}</AppContext.Provider>
+  useEffect(() => {
+    if (!toast) return
+    const id = window.setTimeout(() => setToast(null), 2800)
+    return () => window.clearTimeout(id)
+  }, [toast])
+
+  return (
+    <AppContext.Provider value={value}>
+      {children}
+      {toast && (
+        <div
+          role="status"
+          className="pointer-events-none fixed bottom-6 left-1/2 z-[200] -translate-x-1/2 rounded-xl border border-ok/30 bg-ink px-4 py-2.5 text-sm font-semibold text-mint shadow-lg"
+        >
+          {toast}
+        </div>
+      )}
+    </AppContext.Provider>
+  )
 }
