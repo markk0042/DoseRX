@@ -408,7 +408,9 @@ export function Shell({
                 <AlertTriangle size={14} /> {alerts} alert{alerts > 1 ? 's' : ''}
               </div>
             )}
-            <p className="text-[10px] text-ink-soft/60 sm:text-xs">{format(new Date(), 'EEE d MMM yyyy · HH:mm')}</p>
+            <p className="font-mono text-[10px] tabular-nums text-ink-soft/60 sm:text-xs">
+              <LiveClock />
+            </p>
           </div>
         </header>
 
@@ -417,6 +419,17 @@ export function Shell({
       </main>
     </div>
   )
+}
+
+function LiveClock() {
+  const [now, setNow] = useState(() => new Date())
+
+  useEffect(() => {
+    const id = window.setInterval(() => setNow(new Date()), 1000)
+    return () => window.clearInterval(id)
+  }, [])
+
+  return <>{format(now, 'EEE d MMM yyyy · HH:mm:ss')}</>
 }
 
 export { ADMIN_DEFAULT, STAFF_DEFAULT }
