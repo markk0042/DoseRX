@@ -102,20 +102,78 @@ button, input, select, textarea {
 }
 
 @media print {
+  @page {
+    size: A4;
+    margin: 10mm;
+  }
+
   body {
     background: white !important;
+    color: #0a1f28 !important;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
   }
+
   aside,
   header,
   .print\:hidden,
   nav {
     display: none !important;
   }
+
   main {
     padding: 0 !important;
     max-width: none !important;
+    margin: 0 !important;
   }
+
+  /* Never keep the whole label pack on one page — that caused clipped QR cards */
   .print-area {
+    display: block;
+  }
+
+  .print-bag-section {
+    display: block;
+  }
+
+  .print-label-grid {
+    display: grid !important;
+    grid-template-columns: 1fr 1fr !important;
+    gap: 6mm !important;
+  }
+
+  /* Each sticker stays intact; browser moves whole card to next page if needed */
+  .print-label {
     break-inside: avoid;
+    page-break-inside: avoid;
+    -webkit-column-break-inside: avoid;
+    overflow: hidden;
+  }
+
+  .print-bag-label {
+    margin-bottom: 6mm;
+  }
+
+  .print-med-label {
+    min-height: 0;
+  }
+
+  .print-qr svg {
+    width: 22mm !important;
+    height: 22mm !important;
+    max-width: 22mm;
+    max-height: 22mm;
+  }
+
+  .print-bag-label .print-qr svg {
+    width: 28mm !important;
+    height: 28mm !important;
+    max-width: 28mm;
+    max-height: 28mm;
+  }
+
+  .print\:break-before-page {
+    break-before: page;
+    page-break-before: always;
   }
 }
