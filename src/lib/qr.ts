@@ -55,18 +55,120 @@ export function parseQrPayload(raw: string): QrPayload | null {
   const pipeIdx = unwrapped.indexOf(`${PREFIX}|`)
   const candidate = pipeIdx >= 0 ? unwrapped.slice(pipeIdx) : unwrapped
   const parts = candidate.split('|').map((p) => p.trim()).filter(Boolean)
-  if (parts[0] !== PREFIX) return null
-  if (parts[1] === 'BAG' && parts[2]) return { kind: 'bag', bagId: parts[2] }
-  // MED: DOSERX|MED|bagId|medicationIdOrItemId(|optionalTracking)
-  if (parts[1] === 'MED' && parts[2] && parts[3]) {
-    return {
-      kind: 'med',
-      bagId: parts[2],
-      itemId: parts[3],
-      trackingCode: parts[4] || undefined,
+  if (parts[0] === PREFIX) {
+    if (parts[1] === 'BAG' && parts[2]) return { kind: 'bag', bagId: parts[2] }
+    // MED: DOSERX|MED|bagId|medicationIdOrItemId(|optionalTracking)
+    if (parts[1] === 'MED' && parts[2] && parts[3]) {
+      return {
+        kind: 'med',
+        bagId: parts[2],
+        itemId: parts[3],
+        trackingCode: parts[4] || undefined,
+      }
     }
   }
   return null
+}
+
+/**
+ * Resolve camera/manual input to a bag or med.
+ * Accepts full QR payloads, bag codes (DRX-EMT-02), bag ids, tracking codes, or medication names.
+ */
+export function resolveScanInput(
+  raw: string,
+  bags: DrugBag[],
+): { payload: QrPayload } | { error: string } {
+  const text = raw.trim()
+  if (!text) return { error: 'Enter a bag code, medication name, or DoseRX QR payload.' }
+
+  const parsed = parseQrPayload(text)
+  if (parsed) return { payload: parsed }
+
+  const upper = text.toUpperCase()
+  const lower = text.toLowerCase()
+
+  // Human bag code: DRX-EMT-02
+  const byCode = bags.find((b) => b.code.toUpperCase() === upper)
+  if (byCode) return { payload: { kind: 'bag', bagId: byCode.id } }
+
+  // Internal bag id: bag-emt-02
+  const byId = bags.find((b) => b.id.toLowerCase() === lower)
+  if (byId) return { payload: { kind: 'bag', bagId: byId.id } }
+
+  // Tracking code printed on med labels: DRX-EMT-02-ASPIRIN
+  for (const bag of bags) {
+    for (const item of bag.items) {
+      const track = buildTrackingCode(bag.code, item.medicationId)
+      if (track.toUpperCase() === upper) {
+        return {
+          payload: {
+            kind: 'med',
+            bagId: bag.id,
+            itemId: item.medicationId,
+            trackingCode: track,
+          },
+        }
+      }
+    }
+  }
+
+  // "DRX-EMT-02 Aspirin" or "DRX-EMT-02|aspirin"
+  const split = text.split(/[\s|,]+/).filter(Boolean)
+  if (split.length >= 2) {
+    const bagToken = split[0]!
+    const medToken = split.slice(1).join(' ')
+    const bag =
+      bags.find((b) => b.code.toUpperCase() === bagToken.toUpperCase()) ||
+      bags.find((b) => b.id.toLowerCase() === bagToken.toLowerCase())
+    if (bag) {
+      const item =
+        resolveStockItem(bag, medToken) ||
+        bag.items.find(
+          (i) =>
+            i.name.toLowerCase() === medToken.toLowerCase() ||
+            i.name.toLowerCase().includes(medToken.toLowerCase()) ||
+            i.medicationId.toLowerCase() === medToken.toLowerCase(),
+        )
+      if (item) {
+        return {
+          payload: { kind: 'med', bagId: bag.id, itemId: item.medicationId },
+        }
+      }
+      return { error: `No medication matching “${medToken}” in ${bag.code}.` }
+    }
+  }
+
+  // Medication name / id alone — only if unique across visible bags
+  if (lower.length >= 3) {
+    const hits: { bag: DrugBag; item: StockItem }[] = []
+    for (const bag of bags) {
+      for (const item of bag.items) {
+        if (
+          item.name.toLowerCase() === lower ||
+          item.medicationId.toLowerCase() === lower ||
+          item.name.toLowerCase().includes(lower)
+        ) {
+          hits.push({ bag, item })
+        }
+      }
+    }
+    if (hits.length === 1) {
+      const hit = hits[0]!
+      return {
+        payload: { kind: 'med', bagId: hit.bag.id, itemId: hit.item.medicationId },
+      }
+    }
+    if (hits.length > 1) {
+      const bagsHit = [...new Set(hits.map((h) => h.bag.code))].slice(0, 4).join(', ')
+      return {
+        error: `“${text}” is in multiple bags (${bagsHit}). Enter bag code first, e.g. DRX-EMT-02 ${text}.`,
+      }
+    }
+  }
+
+  return {
+    error: `Unrecognised “${text.slice(0, 48)}${text.length > 48 ? '…' : ''}”. Try a bag code (DRX-EMT-02), tracking code, or DOSERX|BAG|… / DOSERX|MED|….`,
+  }
 }
 
 /**

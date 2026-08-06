@@ -10,7 +10,7 @@ import {
   canStaffHoldBag,
   gradeBagScopeLabel,
 } from '../lib/bagAccess'
-import { parseQrPayload, resolveStockItem } from '../lib/qr'
+import { resolveScanInput, resolveStockItem } from '../lib/qr'
 import type { PhotoEvidence, StaffMember, TagStatus } from '../types'
 import { PhotoCapture } from './PhotoCapture'
 import { BusyOverlay } from './BusyOverlay'
@@ -98,17 +98,37 @@ export function ScanFlowView() {
 
   const handleScan = useCallback(
     (text: string) => {
-      const payload = parseQrPayload(text)
-      if (!payload) {
-        const clipped = text.trim().slice(0, 80)
-        setScanError(
-          `Unrecognised QR${clipped ? ` (“${clipped}${text.trim().length > 80 ? '…' : ''}”)` : ''}. Expect DOSERX|BAG|… or DOSERX|MED|….`,
-        )
+      const scopedBags =
+        currentUser?.role === 'staff' ? bagsInStaffScope(state.bags, currentUser) : state.bags
+      // Allow held out-of-scope bags so they can still be returned
+      const held = currentUser ? bagsHeldOnShift(state.bags, state.shifts, currentUser) : []
+      const searchBags = [
+        ...scopedBags,
+        ...held.filter((h) => !scopedBags.some((s) => s.id === h.id)),
+      ]
+
+      const resolved = resolveScanInput(text, searchBags)
+      if ('error' in resolved) {
+        // Staff typing an out-of-scope bag code — clearer message
+        if (currentUser?.role === 'staff') {
+          const allHit = resolveScanInput(text, state.bags)
+          if ('payload' in allHit) {
+            const bag = state.bags.find((b) => b.id === allHit.payload.bagId)
+            if (bag && !canStaffHoldBag(currentUser, bag)) {
+              setScanError(
+                `${bag.code} is outside your scope (${gradeBagScopeLabel(currentUser)}).`,
+              )
+              return
+            }
+          }
+        }
+        setScanError(resolved.error)
         return
       }
+      const payload = resolved.payload
       const foundBag = getBag(payload.bagId)
       if (!foundBag) {
-        setScanError(`Bag not found for this QR (id: ${payload.bagId}). Labels must match this device’s bag data.`)
+        setScanError(`Bag not found for this code (id: ${payload.bagId}).`)
         return
       }
 
@@ -158,7 +178,7 @@ export function ScanFlowView() {
       setIndication(opts.indications[0] ?? '')
       setPhase('med-detail')
     },
-    [getBag, currentUser, state.shifts],
+    [getBag, currentUser, state.shifts, state.bags],
   )
 
   const completeSignOut = async (witness: StaffMember) => {

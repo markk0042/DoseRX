@@ -170,13 +170,12 @@ export function QrScanner({
       {mode === 'manual' && (
         <div className="space-y-2 rounded-xl border border-line bg-panel p-4">
           <p className="text-sm text-ink-soft">
-            Paste a DoseRX QR payload, or use <strong>Demo quick pick</strong> below to test meds from each bag
-            without a camera.
+            Paste a bag code (<strong>DRX-EMT-02</strong>), medication name, tracking code, or full DoseRX QR payload.
           </p>
           <input
             value={manual}
             onChange={(e) => setManual(e.target.value)}
-            placeholder="DOSERX|BAG|… or DOSERX|MED|…"
+            placeholder="DRX-EMT-02 · bag code, med name, or DOSERX|BAG|…"
             className="w-full rounded-lg border border-line bg-surface px-3 py-2 font-mono text-sm"
           />
           <button
