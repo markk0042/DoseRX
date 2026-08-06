@@ -17,11 +17,15 @@ import { ScanFlowView } from './components/ScanFlowView'
 import { ADMIN_DEFAULT, Shell, STAFF_DEFAULT, type View } from './components/Shell'
 import { useApp } from './context/AppContext'
 import { AppProvider } from './context/AppProvider'
+import { useInactivityHardReload } from './hooks/useInactivityHardReload'
 
 function AppRoutes() {
   const { currentUser, isManagement } = useApp()
   const [view, setView] = useState<View>(STAFF_DEFAULT)
   const [selectedBagId, setSelectedBagId] = useState<string | null>(null)
+
+  // Public try-demo: hard refresh after 10 minutes idle and return to login
+  useInactivityHardReload(10 * 60 * 1000)
 
   if (!currentUser) {
     return (
