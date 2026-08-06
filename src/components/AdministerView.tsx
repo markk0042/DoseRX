@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { WASTE_REASONS } from '../data/adminOptions'
 import { CPG_VERSION, filterOptionsForGrade, isRouteLikelyOutOfScope } from '../data/cpg'
 import { useApp } from '../context/AppContext'
+import { bagsHeldOnShift, bagsUsableForAdminister } from '../lib/bagAccess'
 import { captureLocation } from '../lib/geo'
 import type { StaffMember } from '../types'
 import { BusyOverlay } from './BusyOverlay'
@@ -10,23 +11,15 @@ import { WitnessVerify } from './WitnessVerify'
 export function AdministerView({ preferredBagId }: { preferredBagId?: string }) {
   const { state, currentUser, recordAdministration, recordWaste, getBag, getActiveShift } = useApp()
 
-  /** Only bags currently signed out on shift — blocks admin/waste before checkout */
-  const usableBags = useMemo(() => {
-    return state.bags.filter((b) => {
-      if (!b.activeShiftId) return false
-      if (b.eventEndsAt && new Date(b.eventEndsAt).getTime() < Date.now()) return false
-      const shift = state.shifts.find((s) => s.id === b.activeShiftId && s.active)
-      if (!shift) return false
-      if (!currentUser) return false
-      // Staff may only use bags they personally signed out
-      if (currentUser.role === 'staff' && shift.holderId !== currentUser.id) return false
-      if (b.type === 'controlled') {
-        if (currentUser.grade === 'EMT') return false
-        if (b.grade === 'AP' && currentUser.grade !== 'AP') return false
-      }
-      return true
-    })
-  }, [state.bags, state.shifts, currentUser])
+  const heldBags = useMemo(
+    () => (currentUser ? bagsHeldOnShift(state.bags, state.shifts, currentUser) : []),
+    [state.bags, state.shifts, currentUser],
+  )
+
+  const usableBags = useMemo(
+    () => (currentUser ? bagsUsableForAdminister(state.bags, state.shifts, currentUser) : []),
+    [state.bags, state.shifts, currentUser],
+  )
 
   const [bagId, setBagId] = useState(preferredBagId ?? '')
   const [itemId, setItemId] = useState('')
@@ -220,17 +213,44 @@ export function AdministerView({ preferredBagId }: { preferredBagId?: string }) 
   }
 
   if (usableBags.length === 0) {
+    const ineligible = heldBags.filter((b) => !usableBags.some((u) => u.id === b.id))
     return (
       <div className="mx-auto max-w-2xl rounded-xl border border-amber/40 bg-amber-soft/40 p-5">
         <h2 className="font-display text-2xl font-bold">Administer / waste</h2>
-        <p className="mt-2 text-sm text-ink">
-          No bag is signed out on shift
-          {currentUser.role === 'staff' ? ' to you' : ''} yet.
-        </p>
-        <p className="mt-2 text-sm text-ink-soft">
-          Use <strong>QR · Bags & Meds</strong> to scan a bag and complete shift sign-out first. Medications can only be
-          administered or wasted from a bag that is checked out.
-        </p>
+        {ineligible.length > 0 ? (
+          <>
+            <p className="mt-2 text-sm text-ink">
+              You have {ineligible.length === 1 ? 'a bag' : 'bags'} on shift, but{' '}
+              {ineligible.length === 1 ? 'it is' : 'they are'} outside your{' '}
+              <strong>{currentUser.grade === 'AP' ? 'AP' : currentUser.grade}</strong> grade:
+            </p>
+            <ul className="mt-3 space-y-1.5 text-sm">
+              {ineligible.map((b) => (
+                <li key={b.id} className="rounded-lg bg-panel px-3 py-2 font-semibold text-ink">
+                  {b.code} · {b.name}
+                  <span className="ml-2 font-normal text-ink-soft">
+                    ({b.type === 'controlled' ? 'Controlled' : b.grade})
+                  </span>
+                </li>
+              ))}
+            </ul>
+            <p className="mt-3 text-sm text-ink-soft">
+              Return {ineligible.length === 1 ? 'it' : 'them'} via <strong>QR · Bags & Meds</strong>, then sign out an
+              EMT drug bag (e.g. DRX-EMT-01) to administer.
+            </p>
+          </>
+        ) : (
+          <>
+            <p className="mt-2 text-sm text-ink">
+              No bag is signed out on shift
+              {currentUser.role === 'staff' ? ' to you' : ''} yet.
+            </p>
+            <p className="mt-2 text-sm text-ink-soft">
+              Use <strong>QR · Bags & Meds</strong> to scan a bag and complete shift sign-out first. Medications can
+              only be administered or wasted from a bag that is checked out.
+            </p>
+          </>
+        )}
       </div>
     )
   }

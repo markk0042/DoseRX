@@ -4,6 +4,7 @@ import { useCallback, useMemo, useState } from 'react'
 import { filterOptionsForGrade } from '../data/cpg'
 import { useApp } from '../context/AppContext'
 import { captureLocation } from '../lib/geo'
+import { canStaffHoldBag } from '../lib/bagAccess'
 import { parseQrPayload, resolveStockItem } from '../lib/qr'
 import type { PhotoEvidence, StaffMember, TagStatus } from '../types'
 import { PhotoCapture } from './PhotoCapture'
@@ -133,6 +134,13 @@ export function ScanFlowView() {
   const completeSignOut = async (witness: StaffMember) => {
     if (!currentUser || !bagId || !tagOut) {
       setMsg('Select tag status.')
+      return
+    }
+    const targetBag = getBag(bagId)
+    if (targetBag && currentUser.role === 'staff' && !canStaffHoldBag(currentUser, targetBag)) {
+      setMsg(
+        `Your grade (${currentUser.grade === 'AP' ? 'AP' : currentUser.grade}) cannot sign out ${targetBag.code}. Choose a bag that matches your clinical grade.`,
+      )
       return
     }
     if (tagOut === 'untagged' && !medsChecked) {
@@ -313,13 +321,20 @@ export function ScanFlowView() {
               <ClipboardList size={16} /> Check contents
             </button>
             {!activeShift ? (
-              <button
-                type="button"
-                onClick={() => setPhase('bag-signout')}
-                className="rounded-lg bg-sea px-4 py-2.5 text-sm font-bold text-mint"
-              >
-                Sign out for shift
-              </button>
+              currentUser && bag && currentUser.role === 'staff' && !canStaffHoldBag(currentUser, bag) ? (
+                <p className="rounded-lg border border-coral/30 bg-coral-soft/40 px-3 py-2 text-sm text-coral">
+                  Your grade ({currentUser.grade === 'AP' ? 'AP' : currentUser.grade}) cannot sign out this{' '}
+                  {bag.type === 'controlled' ? 'controlled' : bag.grade} bag. Scan an EMT bag such as DRX-EMT-01.
+                </p>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => setPhase('bag-signout')}
+                  className="rounded-lg bg-sea px-4 py-2.5 text-sm font-bold text-mint"
+                >
+                  Sign out for shift
+                </button>
+              )
             ) : (
               <button
                 type="button"

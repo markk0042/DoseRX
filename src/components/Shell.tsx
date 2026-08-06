@@ -22,6 +22,7 @@ import {
 } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
 import { useApp } from '../context/AppContext'
+import { bagsHeldOnShift } from '../lib/bagAccess'
 import { downloadCdRegisterPdf } from '../lib/cdRegisterPdf'
 import { buildOversightAlerts } from '../lib/oversightAlerts'
 import { OfflineBanner } from './OfflineBanner'
@@ -91,16 +92,10 @@ export function Shell({
   const openDiscrepancyCount = oversight.openDiscrepancies
   const onShiftCount = oversight.onShift
 
-  /** Administer / Waste nav only after a bag is signed out (staff: to them) */
+  /** Show Administer once any bag is signed out to this user (page explains grade mismatches) */
   const canAdminister = useMemo(() => {
     if (!currentUser) return false
-    return state.bags.some((b) => {
-      if (!b.activeShiftId) return false
-      const shift = state.shifts.find((s) => s.id === b.activeShiftId && s.active)
-      if (!shift) return false
-      if (currentUser.role === 'staff') return shift.holderId === currentUser.id
-      return true
-    })
+    return bagsHeldOnShift(state.bags, state.shifts, currentUser).length > 0
   }, [currentUser, state.bags, state.shifts])
 
   const visibleNav = nav.filter((item) => {

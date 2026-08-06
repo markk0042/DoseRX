@@ -14,6 +14,7 @@ import type {
 import { CPG_VERSION } from '../types'
 import { AppContext, type AppContextValue } from './AppContext'
 import { isSupabaseSyncEnabled } from '../lib/supabase'
+import { canStaffHoldBag } from '../lib/bagAccess'
 import {
   cloudBagCount,
   pullLiveStateFromCloud,
@@ -584,6 +585,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
           const bag = prev.bags.find((b) => b.id === bagId)
           if (!bag || bag.activeShiftId || holder.id === witness.id) return prev
           if (bag.eventEndsAt && new Date(bag.eventEndsAt).getTime() < Date.now()) return prev
+          if (holder.role === 'staff' && !canStaffHoldBag(holder, bag)) return prev
           const shiftId = uuid()
           created = shiftId
           const shift: ShiftAssignment = {
